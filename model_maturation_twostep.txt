@@ -1,0 +1,37 @@
+********** MODEL NAME
+maturation_fluorescence
+
+********** MODEL NOTES
+
+
+********** MODEL STATES
+d/dt(D1) = kp * kr/(kdr+kdil)*(1-exp(-(kdr+kdil)*time)) - (km+kdil)*D1
+d/dt(D2) = km*D1 - (km+kdil)*D2
+d/dt(F) = km*D2 - kdil*F
+               
+D1(0) = 0     
+D2(0) = 0                               
+F(0) = 0
+
+********** MODEL PARAMETERS
+kr = .1
+kdr = .07
+kdil = .005
+kp = .025
+km = .05
+d = 4
+
+********** MODEL VARIABLES
+
+
+********** MODEL REACTIONS
+
+
+********** MODEL FUNCTIONS
+
+
+********** MODEL EVENTS
+
+
+********** MODEL MATLAB FUNCTIONS
+

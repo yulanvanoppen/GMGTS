@@ -1,0 +1,49 @@
+********** MODEL NAME
+repressilator
+
+********** MODEL NOTES
+
+
+********** MODEL STATES
+d/dt(P) = p1*mP-p3*P
+d/dt(Q) = p1*mQ-q3*Q
+d/dt(R) = p1*mR-r3*R
+d/dt(mP) = m1+.5*p2/(p2+0.00025*R^2)-0.3466*mP
+d/dt(mQ) = m1+.5*p2/(p2+0.00025*P^2)-0.3466*mQ
+d/dt(mR) = m1+.5*p2/(p2+0.00025*Q^2)-0.3466*mR
+
+P(0) = 10 
+Q(0) = 20 
+R(0) = 30
+mP(0) = 0.4
+mQ(0) = 0.4
+mR(0) = 0.4 
+
+
+********** MODEL PARAMETERS
+p1 = 20
+p2 = .16
+p3 = 0.0693
+q2 = .16
+q3 = 0.0693
+r2 = .16
+r3 = 0.0693
+m1 = 0.0005
+DNAT = 1
+
+
+********** MODEL VARIABLES
+
+
+********** MODEL REACTIONS
+
+
+********** MODEL FUNCTIONS
+
+
+********** MODEL EVENTS
+
+
+********** MODEL MATLAB FUNCTIONS
+
+

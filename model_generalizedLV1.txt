@@ -1,0 +1,76 @@
+********** MODEL NAME
+generalizedLV
+
+********** MODEL NOTES
+
+
+********** MODEL STATES
+d/dt(X1) = X1 * (r1 - k1 * X2)
+d/dt(X2) = X2 * (r2 - k1 * X3)
+d/dt(X3) = X3 * (r3 - k1 * X4)
+d/dt(X4) = X4 * (r4 - k1 * X5)
+d/dt(X5) = X5 * (r5 - k1 * X6)
+d/dt(X6) = X6 * (r6 - k1 * X7)
+d/dt(X7) = X7 * (r7 - k1 * X8)
+d/dt(X8) = X8 * (r8 - k1 * X9)
+d/dt(X9) = X9 * (r9 - k1 * X10)
+d/dt(X10) = X10 * (r10 - k1 * X11)
+d/dt(X11) = X11 * (r11 - k1 * X12)
+d/dt(X12) = X12 * (r12 - k1 * X13)
+d/dt(X13) = X13 * (r13 - k1 * X14)
+d/dt(X14) = X14 * (r14 - k1 * X15)
+d/dt(X15) = X15 * (r15 - k1 * X16)
+d/dt(X16) = X16 * (r16 - k1 * X1)
+
+X1(0) = 1
+X2(0) = 1
+X3(0) = 1
+X4(0) = 1
+X5(0) = 1
+X6(0) = 1
+X7(0) = 1
+X8(0) = 1
+X9(0) = 1
+X10(0) = 1
+X11(0) = 1
+X12(0) = 1
+X13(0) = 1
+X14(0) = 1
+X15(0) = 1
+X16(0) = 1
+
+********** MODEL PARAMETERS
+r1 = .0125
+r2 = .025
+r3 = .0375
+r4 = .05
+r5 = .0625
+r6 = .075
+r7 = .0875
+r8 = .1
+r9 = .1125
+r10 = .125
+r11 = .1375
+r12 = .15
+r13 = .1625
+r14 = .175
+r15 = .1875
+r16 = .2
+
+k1 = .02
+
+
+********** MODEL VARIABLES
+
+
+********** MODEL REACTIONS
+
+
+********** MODEL FUNCTIONS
+
+
+********** MODEL EVENTS
+
+
+********** MODEL MATLAB FUNCTIONS
+

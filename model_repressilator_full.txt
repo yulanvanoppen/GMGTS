@@ -1,0 +1,57 @@
+********** MODEL NAME
+repressilator
+
+********** MODEL NOTES
+
+
+********** MODEL STATES
+d/dt(P) = p1*mP-2*kf*(P/2-0.125*Kd*(sqrt(8*P/Kd+1)-1))*(DNAT-PnDNA)+2*q2*PnDNA-p3*P
+d/dt(Q) = p1*mQ-2*kf*(Q/2-0.125*Kd*(sqrt(8*Q/Kd+1)-1))*(DNAT-QnDNA)+2*r2*QnDNA-q3*Q
+d/dt(R) = p1*mR-2*kf*(R/2-0.125*Kd*(sqrt(8*R/Kd+1)-1))*(DNAT-RnDNA)+2*p2*RnDNA-r3*R
+d/dt(PnDNA) = kf*(P/2-0.125*Kd*(sqrt(8*P/Kd+1)-1))*(DNAT-PnDNA)-q2*PnDNA
+d/dt(QnDNA) = kf*(Q/2-0.125*Kd*(sqrt(8*Q/Kd+1)-1))*(DNAT-QnDNA)-r2*QnDNA
+d/dt(RnDNA) = kf*(R/2-0.125*Kd*(sqrt(8*R/Kd+1)-1))*(DNAT-RnDNA)-p2*RnDNA
+d/dt(mP) = m1+.5*(1-RnDNA/DNAT)-0.3466*mP
+d/dt(mQ) = m1+.5*(1-PnDNA/DNAT)-0.3466*mQ
+d/dt(mR) = m1+.5*(1-QnDNA/DNAT)-0.3466*mR
+
+P(0) = 10 
+Q(0) = 20 
+R(0) = 30 
+PnDNA(0) = 0.9 
+QnDNA(0) = 0.9 
+RnDNA(0) = 0.9 
+mP(0) = 0.4
+mQ(0) = 0.4
+mR(0) = 0.4
+
+
+********** MODEL PARAMETERS
+kf = 1
+p1 = 20
+p2 = .16
+p3 = 0.0693
+q2 = .16
+q3 = 0.0693
+r2 = .16
+r3 = 0.0693
+m1 = 0.0005
+Kd = 4000
+DNAT = 1
+
+
+********** MODEL VARIABLES
+
+
+********** MODEL REACTIONS
+
+
+********** MODEL FUNCTIONS
+
+
+********** MODEL EVENTS
+
+
+********** MODEL MATLAB FUNCTIONS
+
+
