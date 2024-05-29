@@ -1,3 +1,7 @@
+% nearestSPD Version 1.1.0.0 by John D'Errico
+% [obtained from https://nl.mathworks.com/matlabcentral/fileexchange/42885-nearestspd]
+
+
 function Ahat = nearestSPD(A)
 % nearestSPD - the nearest (in Frobenius norm) Symmetric Positive Definite matrix to A
 % usage: Ahat = nearestSPD(A)
