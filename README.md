@@ -1,5 +1,5 @@
-# GMGTS: Gradient Matching Global Two Stage
-_MATLAB®  code package (ODE-based) nonlinear mixed-effects (NLME) model inference using GMGTS presented in [1]_
+# GMGTS: Gradient Matching Global Two-Stage
+_MATLAB®  code package for (ODE-based) nonlinear mixed-effects (NLME) model inference using GMGTS as presented in [1]_
 
 &nbsp;
 
@@ -14,7 +14,7 @@ All subclasses and auxiliary files related to the Generator and Estimator classe
 
 The `Generator` class is generates heterogeneous single-cell time series data from a specified NLME model.
 
-The `Estimator` class infers underlying ODE parameter (random effect) distributions from single-cell time series using the GMGTS [1] and Global Two Stage (GTS) [2] methods.
+The `Estimator` class infers underlying ODE parameter (random effect) distributions from single-cell time series using the GMGTS [1] and Global Two-Stage (GTS) [2] methods.
 
 &nbsp;
 
