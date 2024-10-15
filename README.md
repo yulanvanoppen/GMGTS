@@ -4,9 +4,9 @@ _MATLAB®  code package (ODE-based) nonlinear mixed-effects (NLME) model inferen
 &nbsp;
 
 ## Quickstart
-Install MATLAB® R2022a with IQM Tools Pro Version 1.2.2 (02.01.2017) and Monolix 2021R2
+Install MATLAB® R2022a with IQM Tools Pro Version 1.2.2 (02.01.2017) and Monolix 2021R2.
 
-Run the `inference_*.m` files to reproduce the results in [1]
+Run the `inference_*.m` files to reproduce the results in [1].
 
 The folder `FP_data/` contains the FP maturation microscopy data used for inference.
 
