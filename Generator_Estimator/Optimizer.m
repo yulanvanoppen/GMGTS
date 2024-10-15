@@ -1,7 +1,7 @@
 classdef Optimizer < handle   
     
     properties (Constant)
-        options_quadprog = optimoptions('quadprog', 'Algorithm', 'active-set', 'Display', 'off');
+        options_quadprog = optimoptions('quadprog', 'Algorithm', 'active-set', 'Display', 'off', 'OptimalityTolerance', 1e-3);
         options_newton = optimoptions('fmincon', 'Display', 'off', 'OptimalityTolerance', 1e-3);
 %         options_newton = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-2);
     end

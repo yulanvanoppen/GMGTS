@@ -7,10 +7,16 @@ classdef Estimator < handle
         knots
         linear
         lambda
+        interactive
         lb
         ub
+        grid
+        nmultistart
+        niterFS
+        tolFS
+        niterSS
+        tolSS
         prior
-        state_weights
         
         GMGTS_settings                                                      % GMGTS settings struct
         GMGTS_smoother                                                      % GMGTS smoothing object
@@ -26,18 +32,23 @@ classdef Estimator < handle
     
     methods
         %% Constructor -----------------------------------------------------
-        function obj = Estimator(data, system, stages, varargin)
+        function obj = Estimator(data, system, varargin)
             default_Stages = 2;
             default_Methods = "GMGTS";
             
             initial = system.k0';
             default_Knots = linspace(data.t(1), data.t(end), round((data.T-1)*.75)+1);
             default_Knots = default_Knots(2:end-1);
-            default_Linear = [0 10000];
+            default_Penalized = [0 Inf];
             default_LB = .25 * initial;
             default_UB = 4 .* initial + .0001 * mean(initial);
+            default_TimePoints = obj.data.t(1) + (0:.1:1) * range(obj.data.t);
+            default_NMultiStartFS = 10;
+            default_MaxIterationsFS = 5;
+            default_ConvergenceTolFS = 2e-3;
+            default_MaxIterationsSS = 10;
+            default_ConvergenceTolSS = 1e-2;
             default_Prior = struct('mean', 0, 'prec', 0);
-            default_StateWeights = ones(1, system.K);
             
             parser = inputParser;
             addRequired(parser, 'data', @isstruct);
@@ -46,12 +57,17 @@ classdef Estimator < handle
             addParameter(parser, 'Methods', default_Methods, ...
                          @(x) all(ismember(string(x), ["GMGTS" "GTS"])));
             addParameter(parser, 'Knots', default_Knots, @(x) all(data.t(1) <= x & x <= data.t(end)));
-            addParameter(parser, 'Linear', default_Linear, @(x) numel(x) == 2 && x(1) < x(2));
+            addParameter(parser, 'PenalizedInterval', default_Penalized, @(x) numel(x) == 2 && x(1) < x(2));
             addParameter(parser, 'Lambda', [], @(x) all(x > 0))
+            addParameter(parser, 'InteractiveSmoothing', false, @islogical);
             addParameter(parser, 'LB', default_LB, @(x) all(x < initial));
             addParameter(parser, 'UB', default_UB, @(x) all(x > initial));
-            addParameter(parser, 'LB_States', default_LB, @(x) all(x < initial));
-            addParameter(parser, 'UB_States', default_UB, @(x) all(x > initial));
+            addParameter(parser, 'TimePoints', default_TimePoints, @(x) all(data.t(1) <= x & x <= data.t(end)));
+            addParameter(parser, 'NMultiStartFS', default_NMultiStartFS, @isscalar);
+            addParameter(parser, 'MaxIterationsFS', default_MaxIterationsFS, @isscalar);
+            addParameter(parser, 'ConvergenceTolFS', default_ConvergenceTolFS, @isscalar);
+            addParameter(parser, 'MaxIterationsSS', default_MaxIterationsSS, @isscalar);
+            addParameter(parser, 'ConvergenceTolSS', default_ConvergenceTolSS, @isscalar);
             addParameter(parser, 'Prior', default_Prior, @(x) isfield(x, 'mean') && numel(x.mean) == system.P ...
                                                            && (isfield(x, 'prec') && all(size(x.prec) == system.P) ...
                                                                && issymmetric(x.prec) && all(eig(x.prec) >= 0) ...
@@ -59,7 +75,6 @@ classdef Estimator < handle
                                                                && all(x.sd > 0) ...
                                                             || isfield(x, 'cv') && numel(x.cv) == system.P ...
                                                                && all(x.cv > 0)));
-            addParameter(parser, 'StateWeights', default_StateWeights, @(x) numel(x) == system.K && all(x > 0));
             parse(parser, data, system, stages, varargin{:});
             
             obj.data = parser.Results.data;
@@ -69,9 +84,15 @@ classdef Estimator < handle
             obj.knots = ( sort(unique([data.t(1) parser.Results.Knots data.t(end)])) - data.t(1) ) / range(data.t);
             obj.linear = parser.Results.Linear;
             obj.lambda = parser.Results.Lambda;
+            obj.interactive = parser.Results.InteractiveSmoothing;
             obj.lb = parser.Results.LB;
             obj.ub = parser.Results.UB;
-            obj.state_weights = parser.Results.StateWeights;
+            obj.grid = sort(unique(parser.Results.TimePoints));
+            obj.nmultistart = max(1, round(parser.NMultiStartFS));
+            obj.niterFS = max(1, round(parser.MaxIterationsFS));
+            obj.tolFS = max(1, round(parser.ConvergenceTolFS));
+            obj.niterSS = max(1, round(parser.MaxIterationsSS));
+            obj.tolSS = max(1, round(parser.ConvergenceTolFS));
 
             obj.prior = parser.Results.Prior;
             obj.prior.mean = reshape(obj.prior.mean, [], 1);
@@ -88,45 +109,32 @@ classdef Estimator < handle
             end
             if ~isfield(obj.prior, 'mult'), obj.prior.mult = 1; end
             
-            obj.state_weights = reshape(obj.state_weights, 1, []) / sum(obj.state_weights, 'all');
-            
             if ismember("GMGTS", obj.method), obj.constructor_GMGTS; end
             if ismember("GTS", obj.method), obj.constructor_GTS; end
         end
         
         
         function constructor_GMGTS(obj)
-%             grid = linspace(obj.data.t(1), 0.75*obj.data.t(end), 11);
-            grid = obj.data.t(1) + (0:.1:1) * range(obj.data.t);
-%             grid = obj.data.t(1) + (0:.1:1) * range(obj.data.t)/2;
-            weights = ones(length(grid), obj.system.K);
+            weights = ones(length(obj.grid), obj.system.K);
             weights([1 end], :) = 0;
-%             optindices = [1:11 13:2:21 25:4:40];
-            optindices = 1:length(obj.data.t);
             
-%             disp(obj.linear)
-
-%             interactive = [true true];
-%             interactive = [false true];
-%             interactive = [true false];
-            interactive = [false false];
-            obj.GMGTS_settings.sm = struct('order', 4, 'knots', obj.knots, 'initial', obj.system.k0', ...
-                                           'linear', obj.linear, 'lambda', obj.lambda, 'grid', grid, 'interactive', interactive(1));
-            obj.GMGTS_settings.fs = struct('grid', grid, 'weights', weights, 'initial', obj.system.k0', ...
-                                           'nrep', 5, 'tol', 2e-3, 'nstart', 10, 'perturbation', 0, ...
-                                           'lb', obj.lb, 'ub', obj.ub, 'optindices', optindices, 'prior', obj.prior, ...
-                                           'state_weights', obj.state_weights, 'interactive', interactive(2));
-            obj.GMGTS_settings.ss = struct('weights', weights, 'nrep', 10, ...
-                                           'tol', 1e-2, 'prior', obj.prior);
+            obj.GMGTS_settings.sm = struct('order', 4, 'knots', obj.knots, 'linear', obj.linear, ...
+                                           'lambda', obj.lambda, 'grid', obj.grid, 'interactive', obj.interactive);
+            obj.GMGTS_settings.fs = struct('grid', obj.grid, 'weights', weights, 'initial', obj.system.k0', ...
+                                           'nrep', obj.niterFS, 'tol', obj.tolFS, 'nstart', obj.nmultistart, ...
+                                           'lb', obj.lb, 'ub', obj.ub, 'prior', obj.prior);
+            obj.GMGTS_settings.ss = struct('weights', weights, 'nrep', obj.niterSS, ...
+                                           'tol', obj.tolSS, 'prior', obj.prior);
         end
         
         
         function constructor_GTS(obj)
 %             optindices = 1:16;
             optindices = 1:length(obj.data.t);
+            
             obj.GTS_settings.fs = struct('initial', obj.system.k0', 'lb', obj.lb, 'ub', obj.ub, 'optindices', optindices, ...
-                                         'nrep', 5, 'tol', 2e-3, 'nstart', 10, 'perturbation', 0, 'prior', obj.prior);
-            obj.GTS_settings.ss = struct('nrep', 10, 'tol', 1e-2, 'prior', obj.prior);
+                                         'nrep', obj.niterFS, 'tol', obj.tolSS, 'nstart', obj.nmultistart, 'prior', obj.prior);
+            obj.GTS_settings.ss = struct('nrep', obj.niterSS, 'tol', obj.tolSS, 'prior', obj.prior);
         end
         
         

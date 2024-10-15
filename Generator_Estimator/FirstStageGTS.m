@@ -131,7 +131,7 @@ classdef FirstStageGTS < handle
         
                                                                         % Minimize weighted sum of squared differences
         function opt = minimize_SS(obj, init, index)
-            options = optimoptions('fmincon', 'Display', 'off', 'OptimalityTolerance', 1e-6);
+            options = optimoptions('fmincon', 'Display', 'off', 'OptimalityTolerance', 1e-3);
             SS = @(beta) obj.squares_sum(beta, obj.data.traces(obj.settings.optindices, :, index), ...
                                                                obj.variances_fs(obj.settings.optindices, :, index));
             opt = zeros(size(init));

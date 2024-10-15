@@ -1,0 +1,4 @@
+*.mexw64
+*.asv
+*.mat
+simulation/
