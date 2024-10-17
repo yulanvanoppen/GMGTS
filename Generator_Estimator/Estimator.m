@@ -5,13 +5,16 @@ classdef Estimator < handle
         stages                                                              % stages to execute
         method                                                              % method(s) to conduct inference
         knots
-        linear
+        penalization
+        penalized
         lambda
         interactive
         lb
         ub
         grid
         nmultistart
+        niterSM
+        tolSM
         niterFS
         tolFS
         niterSS
@@ -37,12 +40,15 @@ classdef Estimator < handle
             default_Methods = "GMGTS";
             
             initial = system.k0';
-            default_Knots = linspace(data.t(1), data.t(end), round((data.T-1)*.75)+1);
-            default_Knots = default_Knots(2:end-1);
+            default_Knots = repmat({linspace(data.t(1), data.t(end), round((data.T-1)*.75)+1)}, ...
+                                   1, length(data.observed));
+            default_Penalization = "coefficients";
             default_Penalized = [0 Inf];
             default_LB = .25 * initial;
             default_UB = 4 .* initial + .0001 * mean(initial);
-            default_TimePoints = obj.data.t(1) + (0:.1:1) * range(obj.data.t);
+            default_TimePoints = data.t(1) + (0:.1:1) * range(data.t);
+            default_MaxIterationsSM = 20;
+            default_ConvergenceTolSM = 1e-2;
             default_NMultiStartFS = 10;
             default_MaxIterationsFS = 5;
             default_ConvergenceTolFS = 2e-3;
@@ -55,14 +61,22 @@ classdef Estimator < handle
             addRequired(parser, 'system', @(x) isa(x, 'ODEIQM'));
             addParameter(parser, 'Stages', default_Stages, @(x) ismember(x, 0:2));
             addParameter(parser, 'Methods', default_Methods, ...
-                         @(x) all(ismember(string(x), ["GMGTS" "GTS"])));
-            addParameter(parser, 'Knots', default_Knots, @(x) all(data.t(1) <= x & x <= data.t(end)));
-            addParameter(parser, 'PenalizedInterval', default_Penalized, @(x) numel(x) == 2 && x(1) < x(2));
+                         @(x) all(ismember(upper(string(x)), ["GMGTS" "GTS"])));
+            addParameter(parser, 'Knots', default_Knots, @(x) (iscell(x) && length(x) == length(data.observed) ...
+                                                               && all(cellfun(@isnumeric, x))) ...
+                                                           || isnumeric(x));
+            addParameter(parser, 'Penalization', default_Penalization, ...
+                         @(x) all(ismember(string(x), ["curvature" "coefficients"])));
+            addParameter(parser, 'PenalizedInterval', default_Penalized, @(x) (numel(x) == 2 ||numel(x) == 2*length(data.observed)) ...
+                                                                           && ((size(x, 1) == 2 && all(x(1, :) < x(2, :))) ...
+                                                                           || (size(x, 2) == 2 && all(x(:, 1) < x(:, 2)))));
             addParameter(parser, 'Lambda', [], @(x) all(x > 0))
             addParameter(parser, 'InteractiveSmoothing', false, @islogical);
             addParameter(parser, 'LB', default_LB, @(x) all(x < initial));
             addParameter(parser, 'UB', default_UB, @(x) all(x > initial));
             addParameter(parser, 'TimePoints', default_TimePoints, @(x) all(data.t(1) <= x & x <= data.t(end)));
+            addParameter(parser, 'MaxIterationsSM', default_MaxIterationsSM, @isscalar);
+            addParameter(parser, 'ConvergenceTolSM', default_ConvergenceTolSM, @isscalar);
             addParameter(parser, 'NMultiStartFS', default_NMultiStartFS, @isscalar);
             addParameter(parser, 'MaxIterationsFS', default_MaxIterationsFS, @isscalar);
             addParameter(parser, 'ConvergenceTolFS', default_ConvergenceTolFS, @isscalar);
@@ -75,24 +89,40 @@ classdef Estimator < handle
                                                                && all(x.sd > 0) ...
                                                             || isfield(x, 'cv') && numel(x.cv) == system.P ...
                                                                && all(x.cv > 0)));
-            parse(parser, data, system, stages, varargin{:});
+            parse(parser, data, system, varargin{:});
             
             obj.data = parser.Results.data;
             obj.system = parser.Results.system;
             obj.stages = parser.Results.Stages;
             obj.method = string(parser.Results.Methods);
-            obj.knots = ( sort(unique([data.t(1) parser.Results.Knots data.t(end)])) - data.t(1) ) / range(data.t);
-            obj.linear = parser.Results.Linear;
+            obj.knots = cell(1, length(data.observed));
+            
+            parsed_knots = parser.Results.Knots;
+            if ~iscell(parsed_knots)
+                parsed_knots = repmat({parsed_knots}, 1, length(data.observed));
+            end
+            for state = 1:length(data.observed)
+                truncated = max(data.t(1), min(data.t(end), parsed_knots{state}));
+                arranged = sort(unique([data.t(1) reshape(truncated, 1, []) data.t(end)]));
+                obj.knots{state} = (arranged - data.t(1)) / range(data.t);
+            end
+            obj.penalization = parser.Results.Penalization;
+            obj.penalized = parser.Results.PenalizedInterval;
+            if size(obj.penalized, 2) == 2, obj.penalized = obj.penalized'; end
+            if size(obj.penalized, 2) == 1, obj.penalized = repmat(obj.penalized, 1, length(data.observed)); end
             obj.lambda = parser.Results.Lambda;
             obj.interactive = parser.Results.InteractiveSmoothing;
+            
             obj.lb = parser.Results.LB;
             obj.ub = parser.Results.UB;
             obj.grid = sort(unique(parser.Results.TimePoints));
-            obj.nmultistart = max(1, round(parser.NMultiStartFS));
-            obj.niterFS = max(1, round(parser.MaxIterationsFS));
-            obj.tolFS = max(1, round(parser.ConvergenceTolFS));
-            obj.niterSS = max(1, round(parser.MaxIterationsSS));
-            obj.tolSS = max(1, round(parser.ConvergenceTolFS));
+            obj.niterSM = max(1, round(parser.Results.MaxIterationsSM));
+            obj.tolSM = max(1e-12, parser.Results.ConvergenceTolSM);
+            obj.nmultistart = max(1, round(parser.Results.NMultiStartFS));
+            obj.niterFS = max(1, round(parser.Results.MaxIterationsFS));
+            obj.tolFS = max(1e-12, parser.Results.ConvergenceTolFS);
+            obj.niterSS = max(1, round(parser.Results.MaxIterationsSS));
+            obj.tolSS = max(1e-12, parser.Results.ConvergenceTolSS);
 
             obj.prior = parser.Results.Prior;
             obj.prior.mean = reshape(obj.prior.mean, [], 1);
@@ -118,8 +148,9 @@ classdef Estimator < handle
             weights = ones(length(obj.grid), obj.system.K);
             weights([1 end], :) = 0;
             
-            obj.GMGTS_settings.sm = struct('order', 4, 'knots', obj.knots, 'linear', obj.linear, ...
-                                           'lambda', obj.lambda, 'grid', obj.grid, 'interactive', obj.interactive);
+            obj.GMGTS_settings.sm = struct('order', 4, 'knots', {obj.knots}, 'penalization', obj.penalization, ...
+                                           'penalized', obj.penalized, 'lambda', obj.lambda, 'grid', obj.grid, ...
+                                           'niter', obj.niterSM, 'tol', obj.tolSM, 'interactive', obj.interactive);
             obj.GMGTS_settings.fs = struct('grid', obj.grid, 'weights', weights, 'initial', obj.system.k0', ...
                                            'nrep', obj.niterFS, 'tol', obj.tolFS, 'nstart', obj.nmultistart, ...
                                            'lb', obj.lb, 'ub', obj.ub, 'prior', obj.prior);
