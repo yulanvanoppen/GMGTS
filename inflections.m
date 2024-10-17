@@ -1,6 +1,4 @@
 function [knots, penalized] = inflections(data)
-    curvature_threshold = 3;
-
     t = data.t';
     T = data.T;
     L = length(data.observed);
@@ -20,6 +18,8 @@ function [knots, penalized] = inflections(data)
     my_norm = mean(data.traces, 3) ./ std(data.traces, 0, [1 3]);
     mdy_norm = mean(dy, 3) ./ std(dy, 0, 3);
     mddy_norm = mean(ddy, 3) ./ std(ddy, 0, 3);
+
+    curvature_threshold = 2*std(mddy_norm);
     
     figure(1)
     tiledlayout(1, 3)
@@ -43,14 +43,30 @@ function [knots, penalized] = inflections(data)
     
     % FILTER DOUBLE KNOTS
     combined = peaks_troughs | curvature;
+%     for state = 1:L
+%         idx = 1;
+%         while idx < size(mddy_norm, 1)
+%             if combined(idx, state) && ~diff(combined(idx:idx+1, state))
+%                 subset_abs_mddy = abs(mddy_norm(idx:idx+1, state));
+%                 combined(idx:idx+1, state) = subset_abs_mddy == max(subset_abs_mddy);
+%                 idx = 1;
+%                 continue
+%             end
+%             idx = idx+1;
+%         end
+%     end
+
     for state = 1:L
         idx = 1;
         while idx < size(mddy_norm, 1)
-            if combined(idx, state) && ~diff(combined(idx:idx+1, state))
-                subset_abs_mddy = abs(mddy_norm(idx:idx+1, state));
-                combined(idx:idx+1, state) = subset_abs_mddy == max(subset_abs_mddy);
-                idx = 1;
-                continue
+            if combined(idx, state)
+                next_false = idx + find(~combined(idx+1:end), state);
+                if next_false - idx > 1
+                    subset_abs_mddy = abs(mddy_norm(idx:next_false-1, state));
+                    combined(idx:next_false-1, state) = subset_abs_mddy == max(subset_abs_mddy);
+                    idx = next_false;
+                    continue
+                end
             end
             idx = idx+1;
         end
