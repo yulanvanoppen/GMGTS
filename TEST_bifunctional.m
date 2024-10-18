@@ -11,9 +11,9 @@ close all
 
 load('system_bifunctional_measurable.mat')
 
-first_obs = 1;
+first_obs = 5;
 dt = 10;
-noise_level = .05;
+noise_level = .02;
 seed = 1;
 
 generator = Generator(system ...                                            % generator setup
@@ -42,19 +42,19 @@ methods = [];
 methods = [methods "GMGTS"];
 % methods = [methods "GTS"];
 
-% estimator = Estimator(data, system ...                                      % estimator setup
-%                       , 'Stages', 0 ...                                     % 0: smoothing only, 1: first stage only
-%                       , 'Methods', methods ...                              % GMGT, GTS, or both
-%                       , 'Knots', [0 2.5] ...
-%                       , 'PenalizedInterval', [5 100] ...
-%                       );
-                  
 estimator = Estimator(data, system ...                                      % estimator setup
-                      , 'Stages', 0 ...                                     % 0: smoothing only, 1: first stage only
+                      , 'Stages', 1 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'Knots', knots ...
-                      , 'PenalizedInterval', penalized ...
+                      , 'Knots', [0 2.5 40] ...
+                      , 'PenalizedInterval', [5 100] ...
                       );
+                  
+% estimator = Estimator(data, system ...                                      % estimator setup
+%                       , 'Stages', 1 ...                                     % 0: smoothing only, 1: first stage only
+%                       , 'Methods', methods ...                              % GMGT, GTS, or both
+%                       , 'Knots', knots ...
+%                       , 'PenalizedInterval', penalized ...
+%                       );
 
 estimator.estimate();
 

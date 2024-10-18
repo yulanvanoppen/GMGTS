@@ -34,6 +34,7 @@ generated = generator.data;
 data.beta = ground_truth.beta;
 
 [knots, penalized] = inflections(data)
+knots{2} = [0 10 50 100];
 
 %% Estimate ----------------------------------------------------------------
 
@@ -41,19 +42,21 @@ methods = [];
 methods = [methods "GMGTS"];
 % methods = [methods "GTS"];
 
-estimator = Estimator(data, system ...                                      % estimator setup
-                      , 'Stages', 0 ...                                     % 0: smoothing only, 1: first stage only
-                      , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'Knots', [0 20] ...
-                      , 'PenalizedInterval', [5 100] ...
-                      );
-                  
 % estimator = Estimator(data, system ...                                      % estimator setup
-%                       , 'Stages', 0 ...                                     % 0: smoothing only, 1: first stage only
+%                       , 'Stages', 1 ...                                     % 0: smoothing only, 1: first stage only
 %                       , 'Methods', methods ...                              % GMGT, GTS, or both
-%                       , 'Knots', knots ...
-%                       , 'PenalizedInterval', penalized ...
+%                       , 'Knots', [10 50] ...
+%                       , 'PenalizedInterval', [0 100] ...
+%                       , 'LB', [.001 .01] ...
+%                       , 'UB', [1 1] ...
 %                       );
+                  
+estimator = Estimator(data, system ...                                      % estimator setup
+                      , 'Stages', 1 ...                                     % 0: smoothing only, 1: first stage only
+                      , 'Methods', methods ...                              % GMGT, GTS, or both
+                      , 'Knots', knots ...
+                      , 'PenalizedInterval', penalized ...
+                      );
 
 estimator.estimate();
 

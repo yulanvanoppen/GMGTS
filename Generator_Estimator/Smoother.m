@@ -45,7 +45,7 @@ classdef Smoother < handle
             if ~isempty(settings.lambda)                                    % initial penalty multiplier
                 obj.lambda = reshape(settings.lambda, 1, []) .* ones(1, obj.L);
             else
-                obj.lambda = 1e-3 * ones(1, obj.L);
+                obj.lambda = 1 * ones(1, obj.L);
             end
             
             obj.variances_sm = zeros(obj.T, obj.L, obj.N);
@@ -181,7 +181,7 @@ classdef Smoother < handle
         
         
         function lambda = GCV_lambda(obj)                               % Generalized CV minimizer
-            options = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-2);
+            options = optimoptions('fmincon', 'Display', 'iter', 'StepTolerance', 1e-2);
             
             ncells = 3;
             lambda = zeros(obj.L, ncells);                                  % penalty multiplier
