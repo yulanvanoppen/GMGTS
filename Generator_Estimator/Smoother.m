@@ -99,7 +99,7 @@ classdef Smoother < handle
                 obj.B{k} = obj.bsplines{k}.basis(grid);                     % B-spline basis evaluated at t
                 obj.dB{k} = obj.bsplines{k}.basis_diff(grid);               % corresponding first derivative
                 obj.data.basis_fs{k} = obj.bsplines{k}.basis(grid_fs);      % save for later use
-                obj.data.dbasis_fs{k} = obj.bsplines{k}.basis(grid_fs); 
+                obj.data.dbasis_fs{k} = obj.bsplines{k}.basis_diff(grid_fs); 
                 obj.B_fine{k} = obj.bsplines{k}.basis(grid_fine);           % save for smooth plotting
                 obj.dB_fine{k} = obj.bsplines{k}.basis_diff(grid_fine);
                 

@@ -159,7 +159,6 @@ classdef FirstStage < handle
                 nonzero_ind = reshape((2:obj.T-1)' + obj.T*(0:obj.system.K-1), 1, []);
                 variances = obj.variances_fs(nonzero_ind, nonzero_ind, i);
                 weights = reshape(sqrt(obj.settings.weights(2:end-1, :)), [], 1);
-%                 weights = reshape(sqrt(obj.settings.weights(2:end-1, :) .* obj.settings.state_weights), [], 1);
                 variances = variances ./ weights ./ weights';
                 
                 [obj.beta_fs(i, :), obj.Hs(:, :, i)] = Optimizer.QPGLS(design, response, variances, obj.beta_fs(i, :), ...
