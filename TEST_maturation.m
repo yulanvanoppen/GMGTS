@@ -11,8 +11,8 @@ close all
 
 load('system_maturation_delay.mat')
 
-first_obs = 1;
-dt = 20;
+first_obs = 2;
+dt = 10;
 noise_level = .05;
 seed = 1;
 
@@ -32,9 +32,11 @@ generator.generate();                                                       % ge
 generated = generator.data;
 [data, ground_truth] = obfuscate(generated);
 data.beta = ground_truth.beta;
+data.original = ground_truth.original;
+data.doriginal = ground_truth.doriginal;
 
 [knots, penalized] = inflections(data)
-knots{2} = [0 10 50 100];
+% knots{2} = [0 10 50 100];
 
 %% Estimate ----------------------------------------------------------------
 
@@ -42,23 +44,25 @@ methods = [];
 methods = [methods "GMGTS"];
 % methods = [methods "GTS"];
 
-estimator = Estimator(data, system ...                                      % estimator setup
-                      , 'Stages', 1 ...                                     % 0: smoothing only, 1: first stage only
-                      , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'Knots', [10 50] ...
-                      , 'PenalizedInterval', [0 100] ...
-                      , 'LB', [.001 .01] ...
-                      , 'UB', [1 1] ...
-                      );
-                  
 % estimator = Estimator(data, system ...                                      % estimator setup
-%                       , 'Stages', 1 ...                                     % 0: smoothing only, 1: first stage only
+%                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
 %                       , 'Methods', methods ...                              % GMGT, GTS, or both
-%                       , 'Knots', knots ...
-%                       , 'PenalizedInterval', penalized ...
+%                       , 'Knots', [10 50] ...
+%                       , 'PenalizedInterval', [0 200] ...
+%                       , 'LB', [.001 .01] ...
+%                       , 'UB', [1 1] ...
 %                       );
+%                   
+estimator = Estimator(data, system ...                                      % estimator setup
+                      , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
+                      , 'Methods', methods ...                              % GMGT, GTS, or both
+                      , 'Knots', knots ...
+                      , 'PenalizedInterval', [0 200] ...
+                      , 'TimePoints', data.t ...
+                      );
 
 estimator.estimate();
+estimator.results_GMGTS.lambda
 
 % close all
 plot(estimator, 'True', ground_truth ...

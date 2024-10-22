@@ -13,6 +13,7 @@ classdef Smoother < handle
         settings
         bsplines                                                             % nested object controlling splines from B-splines
         
+        iteration
         delta
         lambda                                                              % penalty multiplier
         B                                                                   % B-spline basis evaluated at t
@@ -45,7 +46,7 @@ classdef Smoother < handle
             if ~isempty(settings.lambda)                                    % initial penalty multiplier
                 obj.lambda = reshape(settings.lambda, 1, []) .* ones(1, obj.L);
             else
-                obj.lambda = 1 * ones(1, obj.L);
+                obj.lambda = 1e3 * ones(1, obj.L);
             end
             
             obj.variances_sm = zeros(obj.T, obj.L, obj.N);
@@ -103,8 +104,8 @@ classdef Smoother < handle
                 obj.B_fine{k} = obj.bsplines{k}.basis(grid_fine);           % save for smooth plotting
                 obj.dB_fine{k} = obj.bsplines{k}.basis_diff(grid_fine);
                 
-                if obj.settings.penalization == "curvature"
-                    obj.ddB{k} = obj.bsplines{k}.basis_ddiff(grid);         % corresponding second derivative
+                if obj.settings.penalization == "curvature"                 % corresponding second derivative
+                    obj.ddB{k} = obj.bsplines{k}.basis_ddiff(grid) / range(obj.data.t)^2;
                     obj.penalty_ind{k} = obj.settings.penalized(1, k) <= obj.data.t ...
                                              & obj.data.t <= obj.settings.penalized(2, k);
                                          
@@ -124,11 +125,12 @@ classdef Smoother < handle
             obj.data.ddbasis = obj.ddB;
             obj.data.penalty_ind = obj.penalty_ind;
 
-            for iter = 1:obj.settings.niter                                 % FWLS spline coefficient estimates
+            for iter = 1:obj.settings.niter                          % FWLS spline coefficient estimates
+                obj.iteration = iter;
                 delta_old = obj.delta; 
                 obj.update_coefficients();                     
                 obj.update_variances();
-                if eucl_rel(delta_old', obj.delta') < obj.settings.tol        % check convergence
+                if eucl_rel(delta_old', obj.delta') < obj.settings.tol      % check convergence
                     break
                 end
             end
@@ -150,7 +152,7 @@ classdef Smoother < handle
             for i = 1:obj.N                                                 % W: correcting weights from variances
                 for k = 1:obj.L                                             % penalty: lambda * L2(spline basis/coefficients)
                     W = diag(max(obj.variances_sm(:, k, i), 1e-7).^-1);     % delta_ik: LS estimate
-                    penalty = obj.lambda(k) * obj.ddB{k} * diag(obj.penalty_ind{k}) * obj.ddB{k}';
+                    penalty = obj.lambda(k) * obj.ddB{k} * (diag(obj.penalty_ind{k}) .* W) * obj.ddB{k}';
                     obj.delta{k}(:, i) = svdinv(obj.B{k} * W * obj.B{k}' + penalty) ...
                                          * obj.B{k} * W * obj.data.traces(:, k, i);
                 end
@@ -181,26 +183,34 @@ classdef Smoother < handle
         
         
         function lambda = GCV_lambda(obj)                               % Generalized CV minimizer
-            options = optimoptions('fmincon', 'Display', 'iter', 'StepTolerance', 1e-2);
+            options = optimoptions('fmincon', 'Display', 'off', 'OptimalityTolerance', 1e-3);
             
-            ncells = 3;
+            ncells = 10;
             lambda = zeros(obj.L, ncells);                                  % penalty multiplier
             for k = 1:obj.L
                 for rep = 1:ncells
                     i = randi(obj.N);
-                    lambda(k, rep) = exp(fmincon(@(log_lambda_k) obj.GCV(log_lambda_k, i, k), ...
-                                                 log(obj.lambda(k)), [], [], [], [], -15, 15, [], options));
+                    GCV_current = Inf;
+                    for start = 1:(1 + 4*(obj.iteration==1))
+                        if obj.iteration == 1, init = unifrnd(-15, 15); else init = log(obj.lambda(k)); end
+                        [loglambda_new, GCV_new] = fmincon(@(log_lambda_k) obj.GCV(log_lambda_k, i, k), ...
+                                                           init, [], [], [], [], -15, 15, [], options);
+                        if GCV_new < GCV_current
+                            GCV_current = GCV_new;
+                            lambda(k, rep) = exp(loglambda_new);
+                        end
+                    end
                 end
             end
             
-            lambda = mean(lambda, 2)';
+            lambda = exp(mean(log(lambda), 2))';
         end
         
         
         function error = GCV(obj, log_lambda_k, i, k)
             Y = obj.data.traces(:, k, i);
-            W = diag(max(obj.variances_sm(:, k, i), 1e-12).^-1);
-            penalty = obj.ddB{k} * diag(obj.penalty_ind{k}) * obj.ddB{k}';
+            W = diag(max(obj.variances_sm(:, k, i), 1e-7).^-1);
+            penalty = obj.ddB{k} * (diag(obj.penalty_ind{k}) .* W) * obj.ddB{k}';
                                                                             % svdinv if necessary
             A = sqrt(W) * obj.B{k}' * ((obj.B{k} * W * obj.B{k}' + exp(log_lambda_k) * penalty) \ obj.B{k} * sqrt(W));
             error = obj.T * norm((eye(obj.T) - A) * Y)^2 / trace(eye(obj.T) - A)^2;
@@ -221,6 +231,9 @@ classdef Smoother < handle
                     obj.data.dsmoothed_fine(:, k, i) = obj.dB_fine{k}' * obj.delta{k}(:, i) / range(obj.data.t);
                 end
             end
+%             a = linspace(0, 0, size(obj.data.smoothed, 1))';
+%             obj.data.smoothed = a .* obj.data.smoothed + (1-a) .* obj.data.original([1 3:end], 2, :);
+%             obj.data.dsmoothed = a .* obj.data.dsmoothed + (1-a) .* obj.data.doriginal([1 3:end], 2, :);
             
             obj.data.smoothed = max(obj.data.smoothed, 1e-12);
         end

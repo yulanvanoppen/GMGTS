@@ -56,22 +56,21 @@ function [knots, penalized] = inflections(data)
 %         end
 %     end
 
-    for state = 1:L
-        idx = 1;
-        while idx < size(mddy_norm, 1)
-            if combined(idx, state)
-                next_false = idx + find(~combined(idx+1:end), state);
-                if next_false - idx > 1
-                    subset_abs_mddy = abs(mddy_norm(idx:next_false-1, state));
-                    combined(idx:next_false-1, state) = subset_abs_mddy == max(subset_abs_mddy);
-                    idx = next_false;
-                    continue
-                end
-            end
-            idx = idx+1;
-        end
-    end
-    combined;
+%     for state = 1:L
+%         idx = 1;
+%         while idx < size(mddy_norm, 1)
+%             if combined(idx, state)
+%                 next_false = idx + find(~combined(idx+1:end), state);
+%                 if next_false - idx > 1
+%                     subset_abs_mddy = abs(mddy_norm(idx:next_false-1, state));
+%                     combined(idx:next_false-1, state) = subset_abs_mddy == max(subset_abs_mddy);
+%                     idx = next_false;
+%                     continue
+%                 end
+%             end
+%             idx = idx+1;
+%         end
+%     end
     
     % PENALIZED INTERVAL BASED ON HIGH INITIAL CURVATURE
     penalized = zeros(2, L);

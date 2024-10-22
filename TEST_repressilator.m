@@ -44,12 +44,12 @@ methods = [methods "GMGTS"];
 % methods = [methods "GTS"];
 
 % estimator = Estimator(data, system ...                                      % estimator setup
-%                       , 'Stages', 0 ...                                     % 0: smoothing only, 1: first stage only
+%                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
 %                       , 'Methods', methods ...                              % GMGT, GTS, or both
 %                       );
                   
 estimator = Estimator(data, system ...                                      % estimator setup
-                      , 'Stages', 1 ...                                     % 0: smoothing only, 1: first stage only
+                      , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
                       , 'Knots', knots ...
                       , 'PenalizedInterval', penalized ...

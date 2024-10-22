@@ -42,7 +42,7 @@ classdef Estimator < handle
             initial = system.k0';
             default_Knots = repmat({linspace(data.t(1), data.t(end), round((data.T-1)*.75)+1)}, ...
                                    1, length(data.observed));
-            default_Penalization = "coefficients";
+            default_Penalization = "curvature";
             default_Penalized = [0 Inf];
             default_LB = .25 * initial;
             default_UB = 4 .* initial + .0001 * mean(initial);

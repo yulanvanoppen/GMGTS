@@ -395,7 +395,9 @@ classdef FirstStage < handle
                 if rep == 1
                     % DEFINITION OF Var XO
                     S = diag(reshape(obj.data.variances_sm(:, :, i) + 1e-12, 1, []));
+%                     S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7).^-1);
                     unp_prec = Z' * (S \ Z);
+%                     LD2 = blkdiag(Lambda_blocks{:}) * ddZ' * diag(horzcat(obj.data.penalty_ind{:})) * ddZ;
                     inv_pen_prec = svdinv(unp_prec + LD2);
                     var_delta = inv_pen_prec * unp_prec * inv_pen_prec;
                     var_XOdXO = [Z_fs; dZ_fs] * var_delta * [Z_fs; dZ_fs]';
