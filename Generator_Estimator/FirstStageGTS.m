@@ -79,6 +79,7 @@ classdef FirstStageGTS < handle
             end
             disp("Initial beta:")
             disp(exp(opt))
+            obj.settings.perturbation = 0;
             obj.beta_fs = repmat(exp(opt), obj.N, 1) .* (1 + obj.settings.perturbation * randn(obj.N, obj.system.P));
 %             obj.beta_fs = obj.data.beta;
         end

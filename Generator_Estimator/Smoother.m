@@ -231,9 +231,9 @@ classdef Smoother < handle
                     obj.data.dsmoothed_fine(:, k, i) = obj.dB_fine{k}' * obj.delta{k}(:, i) / range(obj.data.t);
                 end
             end
-%             a = linspace(0, 0, size(obj.data.smoothed, 1))';
-%             obj.data.smoothed = a .* obj.data.smoothed + (1-a) .* obj.data.original([1 3:end], 2, :);
-%             obj.data.dsmoothed = a .* obj.data.dsmoothed + (1-a) .* obj.data.doriginal([1 3:end], 2, :);
+            a = linspace(0, 0, size(obj.data.smoothed, 1))';
+            obj.data.smoothed = a .* obj.data.smoothed + (1-a) .* obj.data.original(:, 2, :);
+            obj.data.dsmoothed = a .* obj.data.dsmoothed + (1-a) .* obj.data.doriginal(:, 2, :);
             
             obj.data.smoothed = max(obj.data.smoothed, 1e-12);
         end

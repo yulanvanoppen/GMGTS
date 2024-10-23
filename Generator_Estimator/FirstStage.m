@@ -404,7 +404,7 @@ classdef FirstStage < handle
 
                     % DEFINITION OF Var beta
 %                     var_beta = 2 * svdinv(obj.init_hess) + obj.settings.perturbation^2 * eye(obj.system.P);
-                    var_beta = max(.25, obj.settings.perturbation)^2 * diag(obj.beta_fs_init(1, :).^2);
+                    var_beta = max(.5, obj.settings.perturbation)^2 * diag(obj.beta_fs_init(1, :).^2);
 %                     var_beta = 2 * svdinv(obj.init_hess) + obj.settings.perturbation^2 * diag(obj.beta_fs_init(1, :).^2);
 %                     var_beta = 2 * svdinv(obj.init_hess);
 %                     var_beta = eye(obj.system.P);
