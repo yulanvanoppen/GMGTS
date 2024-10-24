@@ -18,7 +18,7 @@ seed = 1;
 
 generator = Generator(system ...                                            % generator setup
                       , 'N', 100 ...                                        % number of cells
-                      , 't', unique([0:10 20 dt:dt:200]) ...                                  % time grid
+                      , 't', unique([0 5 10 20 dt:dt:200]) ...                                  % time grid
                       , 'error_std', noise_level ...                               % std of lognormal multiplicative errors
                       , 'D_mult', .25 ...
                       , 'observed', first_obs:system.K ...                            % observed states labels (or indices)
@@ -56,13 +56,13 @@ methods = [methods "GMGTS"];
 estimator = Estimator(data, system ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'Knots', [10 50] ...
+                      , 'Knots', linspace(0, 200, 5) ...
                       , 'PenalizedInterval', [0 200] ...
                       , 'TimePoints', data.t ...
                       );
 
 estimator.estimate();
-estimator.results_GMGTS.lambda
+fprintf("Estimated Lambda: %.4f\n", estimator.results_GMGTS.lambda);
 
 % close all
 plot(estimator, 'True', ground_truth ...

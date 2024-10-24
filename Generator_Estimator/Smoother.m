@@ -46,7 +46,7 @@ classdef Smoother < handle
             if ~isempty(settings.lambda)                                    % initial penalty multiplier
                 obj.lambda = reshape(settings.lambda, 1, []) .* ones(1, obj.L);
             else
-                obj.lambda = 1e3 * ones(1, obj.L);
+                obj.lambda = zeros(1, obj.L);
             end
             
             obj.variances_sm = zeros(obj.T, obj.L, obj.N);
@@ -145,7 +145,7 @@ classdef Smoother < handle
         
                                             
         function update_coefficients(obj)                               % Spline coefficients from current variances
-            if ~obj.settings.interactive && isempty(obj.settings.lambda)
+            if ~obj.settings.interactive && isempty(obj.settings.lambda) && obj.iteration > 1
                 obj.lambda = obj.GCV_lambda();                              % minimize Generalized CV error
             end
             
@@ -186,13 +186,16 @@ classdef Smoother < handle
             options = optimoptions('fmincon', 'Display', 'off', 'OptimalityTolerance', 1e-3);
             
             ncells = 10;
+%             ncells = obj.N;
             lambda = zeros(obj.L, ncells);                                  % penalty multiplier
             for k = 1:obj.L
                 for rep = 1:ncells
-                    i = randi(obj.N);
+%                     i = randi(obj.N);
+                    i = rep + ncells;
                     GCV_current = Inf;
-                    for start = 1:(1 + 4*(obj.iteration==1))
-                        if obj.iteration == 1, init = unifrnd(-15, 15); else init = log(obj.lambda(k)); end
+                    for start = 1:(1 + 9*(obj.iteration==2))
+%                         if obj.iteration == 1, init = 6; else, init = log(obj.lambda(k)); end
+                        if obj.iteration == 2, init = unifrnd(-15, 15); else, init = log(obj.lambda(k)); end
                         [loglambda_new, GCV_new] = fmincon(@(log_lambda_k) obj.GCV(log_lambda_k, i, k), ...
                                                            init, [], [], [], [], -15, 15, [], options);
                         if GCV_new < GCV_current
@@ -203,7 +206,8 @@ classdef Smoother < handle
                 end
             end
             
-            lambda = exp(mean(log(lambda), 2))';
+%             lambda = exp(mean(log(lambda), 2))';
+            lambda = mean(lambda, 2);
         end
         
         
@@ -231,9 +235,9 @@ classdef Smoother < handle
                     obj.data.dsmoothed_fine(:, k, i) = obj.dB_fine{k}' * obj.delta{k}(:, i) / range(obj.data.t);
                 end
             end
-            a = linspace(0, 0, size(obj.data.smoothed, 1))';
-            obj.data.smoothed = a .* obj.data.smoothed + (1-a) .* obj.data.original(:, 2, :);
-            obj.data.dsmoothed = a .* obj.data.dsmoothed + (1-a) .* obj.data.doriginal(:, 2, :);
+%             a = linspace(1, 0, size(obj.data.smoothed, 1))';
+%             obj.data.smoothed = a .* obj.data.smoothed + (1-a) .* obj.data.original(:, 2, :);
+%             obj.data.dsmoothed = a .* obj.data.dsmoothed + (1-a) .* obj.data.doriginal(:, 2, :);
             
             obj.data.smoothed = max(obj.data.smoothed, 1e-12);
         end

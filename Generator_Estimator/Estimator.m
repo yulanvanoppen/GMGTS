@@ -48,7 +48,7 @@ classdef Estimator < handle
             default_UB = 4 .* initial + .0001 * mean(initial);
             default_TimePoints = data.t(1) + (0:.1:1) * range(data.t);
             default_MaxIterationsSM = 20;
-            default_ConvergenceTolSM = 1e-2;
+            default_ConvergenceTolSM = 1e-3;
             default_NMultiStartFS = 10;
             default_MaxIterationsFS = 5;
             default_ConvergenceTolFS = 2e-3;

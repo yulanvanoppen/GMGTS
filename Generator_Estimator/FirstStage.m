@@ -350,7 +350,7 @@ classdef FirstStage < handle
             dZ_fs = blkdiag(obj.data.dbasis_fs{:})' / range(obj.data.t);
             Lambda_blocks = arrayfun(@(i) obj.data.lambda(i) * eye(size(obj.data.basis{i}, 1)), ...
                                      1:length(obj.data.lambda), 'UniformOutput', false);
-            LD2 = blkdiag(Lambda_blocks{:}) * ddZ' * diag(horzcat(obj.data.penalty_ind{:})) * ddZ;    
+%             LD2 = blkdiag(Lambda_blocks{:}) * ddZ' * diag(horzcat(obj.data.penalty_ind{:})) * ddZ;    
 
             if rep > 1
                 g_all = obj.system.g(states, obj.data.t);
@@ -394,10 +394,10 @@ classdef FirstStage < handle
 
                 if rep == 1
                     % DEFINITION OF Var XO
-                    S = diag(reshape(obj.data.variances_sm(:, :, i) + 1e-12, 1, []));
-%                     S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7).^-1);
+%                     S = diag(reshape(obj.data.variances_sm(:, :, i) + 1e-12, 1, []));
+                    S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
                     unp_prec = Z' * (S \ Z);
-%                     LD2 = blkdiag(Lambda_blocks{:}) * ddZ' * diag(horzcat(obj.data.penalty_ind{:})) * ddZ;
+                    LD2 = blkdiag(Lambda_blocks{:}) * ddZ' * diag(horzcat(obj.data.penalty_ind{:}) .* diag(S.^-1)') * ddZ;
                     inv_pen_prec = svdinv(unp_prec + LD2);
                     var_delta = inv_pen_prec * unp_prec * inv_pen_prec;
                     var_XOdXO = [Z_fs; dZ_fs] * var_delta * [Z_fs; dZ_fs]';
