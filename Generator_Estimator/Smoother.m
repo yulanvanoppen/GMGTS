@@ -16,6 +16,7 @@ classdef Smoother < handle
         iteration
         delta
         lambda                                                              % penalty multiplier
+        lambda_mult
         B                                                                   % B-spline basis evaluated at t
         dB                                                                  % corresponding first derivative
         ddB                                                                 % corresponding second derivative
@@ -48,6 +49,7 @@ classdef Smoother < handle
             else
                 obj.lambda = zeros(1, obj.L);
             end
+            obj.lambda_mult = ones(1, obj.L);
             
             obj.variances_sm = zeros(obj.T, obj.L, obj.N);
             obj.variances_fs = zeros(length(settings.grid), obj.L, obj.N);  % measurement error variances
@@ -58,7 +60,7 @@ classdef Smoother < handle
         
         function output = smooth(obj)                                   % Smooth trajectory data
             if obj.settings.interactive
-                app = smoothing_app(obj);
+                app = smoothing_new(obj);
                 waitfor(app.FinishButton, 'UserData')
                 if isvalid(app)
                     obj.data = app.smoother.data;
@@ -145,7 +147,7 @@ classdef Smoother < handle
         
                                             
         function update_coefficients(obj)                               % Spline coefficients from current variances
-            if ~obj.settings.interactive && isempty(obj.settings.lambda) && obj.iteration > 1
+            if isempty(obj.settings.lambda) && obj.iteration > 1
                 obj.lambda = obj.GCV_lambda();                              % minimize Generalized CV error
             end
             
@@ -205,9 +207,9 @@ classdef Smoother < handle
                     end
                 end
             end
-            
-%             lambda = exp(mean(log(lambda), 2))';
-            lambda = mean(lambda, 2);
+            lambda = exp(mean(log(lambda), 2))';
+            lambda = lambda .* obj.lambda_mult;
+%             lambda = mean(lambda, 2);
         end
         
         
