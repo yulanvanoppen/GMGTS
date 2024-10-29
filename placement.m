@@ -1,7 +1,12 @@
-function knots = inflections(data)
+function knots = placement(data)
     t = data.t';
     T = data.T;
     L = length(data.observed);
+    
+    % BASE KNOTS
+    base = false(data.T-2, 1);
+    [~, base_ind] = min(abs(data.t' - linspace(data.t(1), data.t(end), 5)));
+    base(base_ind(2:end-1)) = true; 
     
     % FINITE DIFFERENCE DERIVATIVE APPROXIMATIONS
     d21 = t(2:end-1) - t(1:end-2);                      
@@ -14,7 +19,7 @@ function knots = inflections(data)
     dy = (y3 - y2) ./ (d32 + d21);                      % unequally spaced finite differences
     ddy = 2 * (y1./d21./d31 - y2./d32./d21 + y3./d32./d31);
     
-    % MEANS AND STANDARD DEVIATIONS ACROSS CELLS
+                                                        % means and standard deviations across cells
     my_norm = mean(data.traces, 3) ./ std(data.traces, 0, [1 3]);
     mdy_norm = mean(dy, 3) ./ std(dy, 0, 3);
     mddy_norm = mean(ddy, 3) ./ std(ddy, 0, 3);
@@ -39,7 +44,45 @@ function knots = inflections(data)
         end
     end
     peaks_troughs = crossings & (abs(mddy_norm) > .25);
+    
+    base_peaks_troughs = repmat(base, 1, L);
+    for state = 1:L
+        for idx = 1:size(peaks_troughs, 1)
+            if peaks_troughs(idx, state)
+                if idx > 1 && base(idx-1, state) && base(idx+1, state)
+                    base_peaks_troughs(idx-1:idx+1, state) = [false true false];
+                elseif idx > 1 && base(idx-1, state)
+                    base_peaks_troughs(idx-1:idx, state) = [false true];
+                elseif base(idx+1, state)
+                    base_peaks_troughs(idx:idx+1, state) = [true false];
+                else
+                    base_peaks_troughs(idx, state) = true;
+                end
+            end
+        end
+    end
+    
     curvature = abs(mddy_norm) > curvature_threshold;
+    fast_dynamics_end = ones(1, L);
+    for state = 1:L
+        n_fast_dynamics = find(diff([find(curvature(:, state)); data.T+1]) > 2, 1);
+        fast_dynamics_ind = find(curvature(:, state), n_fast_dynamics);
+        fast_dynamics_end(state) = fast_dynamics_ind(end);
+    end
+    
+    base_curvature = base_peaks_troughs;
+    for state = 1:L
+        idx = fast_dynamics_end(state);
+        if idx > 1 && base_peaks_troughs(idx-1, state) && base_peaks_troughs(idx+1, state)
+            base_curvature(idx-1:idx+1, state) = [false true false];
+        elseif idx > 1 && base_peaks_troughs(idx-1, state)
+            base_curvature(idx-1:idx, state) = [false true];
+        elseif base_peaks_troughs(idx+1, state)
+            base_curvature(idx:idx+1, state) = [true false];
+        else
+            base_curvature(idx, state) = true;
+        end
+    end
     
     crossings2 = logical(abs(diff(sign(mddy_norm))) == 2);
     crossings2(end+1, :) = false;
@@ -66,7 +109,7 @@ function knots = inflections(data)
             before_crossing = mddy_norm(prev+max_prev, state);
             after_crossing = mddy_norm(idx+max_next, state);
             if ~isempty(before_crossing) && ~isempty(after_crossing) ...
-               && max(abs(before_crossing), abs(after_crossing)) > .1 ...
+               && (max(abs(before_crossing), abs(after_crossing)) > std(mddy_norm(:, state))/4) ...
                && sign(before_crossing) ~= sign(after_crossing)
                inflections(idx, state) = true;
             end

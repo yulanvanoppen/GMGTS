@@ -12,7 +12,7 @@ close all
 load('system_maturation_delay.mat')
 
 first_obs = 1;
-dt = 20;
+dt = 5;
 noise_level = .1;
 seed = 1;
 
@@ -35,8 +35,7 @@ data.beta = ground_truth.beta;
 data.original = ground_truth.original;
 data.doriginal = ground_truth.doriginal;
 
-[knots, penalized] = inflections(data)
-% knots{2} = [0 10 50 100];
+knots = placement(data)
 
 %% Estimate ----------------------------------------------------------------
 
@@ -56,11 +55,9 @@ methods = [methods "GMGTS"];
 estimator = Estimator(data, system ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'Knots', linspace(0, 200, 5) ...
-                      , 'PenalizedInterval', [0 200] ...
-                      , 'TimePoints', data.t ...
-                      , 'Lambda', 1e-10 ...
-                      ...%, 'InteractiveSmoothing', true ...
+                      , 'Knots', linspace(0, 200, round(data.T/2)) ...
+                      , 'PenalizedInterval', [200 1000] ...
+                      , 'Lambda', 1e-12 ...
                       );
 
 estimator.estimate();
