@@ -1,4 +1,4 @@
-function [knots, penalized] = inflections(data)
+function knots = inflections(data)
     t = data.t';
     T = data.T;
     L = length(data.observed);
@@ -41,8 +41,43 @@ function [knots, penalized] = inflections(data)
     peaks_troughs = crossings & (abs(mddy_norm) > .25);
     curvature = abs(mddy_norm) > curvature_threshold;
     
+    crossings2 = logical(abs(diff(sign(mddy_norm))) == 2);
+    crossings2(end+1, :) = false;
+    for state = 1:L
+        for idx = 1:size(crossings2, 1)-1
+            if crossings2(idx, state)
+                subset_abs_mddy = abs(mddy_norm(idx:idx+1, state));
+                crossings(idx:idx+1, state) = subset_abs_mddy == min(subset_abs_mddy);
+            end
+        end
+    end
+    
+    inflections = false(size(crossings2));
+    for state = 1:L
+        prev = 0;
+        idx = find(crossings2(:, state), 1);
+        while idx < size(crossings2, 1)
+            next = idx + find(crossings2(idx+1:end, state), 1);
+            if isempty(next), next = size(crossings2, 1); end
+            prev_idx = mddy_norm(prev+1:idx, state);
+            idx_next = mddy_norm(idx+1:next, state);
+            [~, max_prev] = max(abs(prev_idx));
+            [~, max_next] = max(abs(idx_next));
+            before_crossing = mddy_norm(prev+max_prev, state);
+            after_crossing = mddy_norm(idx+max_next, state);
+            if ~isempty(before_crossing) && ~isempty(after_crossing) ...
+               && max(abs(before_crossing), abs(after_crossing)) > .1 ...
+               && sign(before_crossing) ~= sign(after_crossing)
+               inflections(idx, state) = true;
+            end
+            prev = idx;
+            idx = next;
+        end
+    end
+    inflections
+    
     % FILTER DOUBLE KNOTS
-    combined = peaks_troughs | curvature;
+    combined = peaks_troughs | curvature | inflections;
 %     for state = 1:L
 %         idx = 1;
 %         while idx < size(mddy_norm, 1)
@@ -56,33 +91,33 @@ function [knots, penalized] = inflections(data)
 %         end
 %     end
 
-%     for state = 1:L
-%         idx = 1;
-%         while idx < size(mddy_norm, 1)
-%             if combined(idx, state)
-%                 next_false = idx + find(~combined(idx+1:end), state);
-%                 if next_false - idx > 1
-%                     subset_abs_mddy = abs(mddy_norm(idx:next_false-1, state));
-%                     combined(idx:next_false-1, state) = subset_abs_mddy == max(subset_abs_mddy);
-%                     idx = next_false;
-%                     continue
-%                 end
-%             end
-%             idx = idx+1;
-%         end
-%     end
-    
-    % PENALIZED INTERVAL BASED ON HIGH INITIAL CURVATURE
-    penalized = zeros(2, L);
     for state = 1:L
-        first_high_curvature = find(curvature(:, state), 1);
-        if first_high_curvature < data.T/4
-            slow_dynamics = first_high_curvature + find(~curvature(first_high_curvature+1:end, state), 1);
-            penalized(:, state) = [t(slow_dynamics+1) t(end)];
-        else
-            penalized(:, state) = [t(1) t(end)];
+        idx = 1;
+        while idx < size(mddy_norm, 1)
+            if combined(idx, state)
+                next_false = idx + find(~combined(idx+1:end), state);
+                if next_false - idx > 1
+                    subset_abs_mddy = abs(mddy_norm(idx:next_false-1, state));
+                    combined(idx:next_false-1, state) = subset_abs_mddy == max(subset_abs_mddy);
+                    idx = next_false;
+                    continue
+                end
+            end
+            idx = idx+1;
         end
     end
+    
+%     % PENALIZED INTERVAL BASED ON HIGH INITIAL CURVATURE
+%     penalized = zeros(2, L);
+%     for state = 1:L
+%         first_high_curvature = find(curvature(:, state), 1);
+%         if first_high_curvature < data.T/4
+%             slow_dynamics = first_high_curvature + find(~curvature(first_high_curvature+1:end, state), 1);
+%             penalized(:, state) = [t(slow_dynamics+1) t(end)];
+%         else
+%             penalized(:, state) = [t(1) t(end)];
+%         end
+%     end
     
     % REMOVED KNOTS AT SECOND TO LAST TIME POINT
     subset = true(T, L);

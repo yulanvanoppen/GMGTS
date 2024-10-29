@@ -34,7 +34,7 @@ generated = generator.data;
 [data, ground_truth] = obfuscate(generated);
 data.beta = ground_truth.beta;
 
-[knots, penalized] = inflections(data)
+knots = inflections(data)
 
 
 %% Estimate ----------------------------------------------------------------
