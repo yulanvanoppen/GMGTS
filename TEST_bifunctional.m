@@ -33,7 +33,7 @@ generated = generator.data;
 [data, ground_truth] = obfuscate(generated);
 data.beta = ground_truth.beta;
 
-knots = inflections(data)
+knots = placement(data)
 
 
 %% Estimate ----------------------------------------------------------------
@@ -52,7 +52,7 @@ methods = [methods "GMGTS"];
 estimator = Estimator(data, system ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'Knots', [2.5 linspace(2*dt, 100, round(data.T/2-1))] ...
+                      , 'Knots', knots ...
                       , 'PenalizedInterval', [200 1000] ...
                       , 'Lambda', 1e-12 ...
                       );

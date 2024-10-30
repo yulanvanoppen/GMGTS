@@ -11,7 +11,7 @@ close all
 
 load('system_maturation_delay.mat')
 
-first_obs = 1;
+first_obs = 2;
 dt = 5;
 noise_level = .1;
 seed = 1;
@@ -55,7 +55,7 @@ methods = [methods "GMGTS"];
 estimator = Estimator(data, system ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'Knots', linspace(0, 200, round(data.T/2)) ...
+                      , 'Knots', [0 10 50] ...
                       , 'PenalizedInterval', [200 1000] ...
                       , 'Lambda', 1e-12 ...
                       );

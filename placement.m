@@ -4,9 +4,9 @@ function knots = placement(data)
     L = length(data.observed);
     
     % BASE KNOTS
-    base = false(data.T-2, 1);
-    [~, base_ind] = min(abs(data.t' - linspace(data.t(1), data.t(end), 5)));
-    base(base_ind(2:end-1)) = true; 
+    base = false(data.T-2, L);
+    [~, base_ind] = unique(min(abs(data.t' - linspace(data.t(1), data.t(end), 5))));
+    base(base_ind(2:end-1), :) = true; 
     
     % FINITE DIFFERENCE DERIVATIVE APPROXIMATIONS
     d21 = t(2:end-1) - t(1:end-2);                      
@@ -45,15 +45,15 @@ function knots = placement(data)
     end
     peaks_troughs = crossings & (abs(mddy_norm) > .25);
     
-    base_peaks_troughs = repmat(base, 1, L);
+    base_peaks_troughs = base, 1, L;
     for state = 1:L
         for idx = 1:size(peaks_troughs, 1)
             if peaks_troughs(idx, state)
-                if idx > 1 && base(idx-1, state) && base(idx+1, state)
+                if idx > 1 && idx < data.T-2 && base(idx-1, state) && base(idx+1, state)
                     base_peaks_troughs(idx-1:idx+1, state) = [false true false];
                 elseif idx > 1 && base(idx-1, state)
                     base_peaks_troughs(idx-1:idx, state) = [false true];
-                elseif base(idx+1, state)
+                elseif idx < data.T-2 && base(idx+1, state)
                     base_peaks_troughs(idx:idx+1, state) = [true false];
                 else
                     base_peaks_troughs(idx, state) = true;
@@ -73,11 +73,11 @@ function knots = placement(data)
     base_curvature = base_peaks_troughs;
     for state = 1:L
         idx = fast_dynamics_end(state);
-        if idx > 1 && base_peaks_troughs(idx-1, state) && base_peaks_troughs(idx+1, state)
+        if idx > 1 && idx < data.T-2 && base_peaks_troughs(idx-1, state) && base_peaks_troughs(idx+1, state)
             base_curvature(idx-1:idx+1, state) = [false true false];
         elseif idx > 1 && base_peaks_troughs(idx-1, state)
             base_curvature(idx-1:idx, state) = [false true];
-        elseif base_peaks_troughs(idx+1, state)
+        elseif idx < data.T-2 && base_peaks_troughs(idx+1, state)
             base_curvature(idx:idx+1, state) = [true false];
         else
             base_curvature(idx, state) = true;
@@ -95,47 +95,56 @@ function knots = placement(data)
         end
     end
     
-    inflections = false(size(crossings2));
-    for state = 1:L
-        prev = 0;
-        idx = find(crossings2(:, state), 1);
-        while idx < size(crossings2, 1)
-            next = idx + find(crossings2(idx+1:end, state), 1);
-            if isempty(next), next = size(crossings2, 1); end
-            prev_idx = mddy_norm(prev+1:idx, state);
-            idx_next = mddy_norm(idx+1:next, state);
-            [~, max_prev] = max(abs(prev_idx));
-            [~, max_next] = max(abs(idx_next));
-            before_crossing = mddy_norm(prev+max_prev, state);
-            after_crossing = mddy_norm(idx+max_next, state);
-            if ~isempty(before_crossing) && ~isempty(after_crossing) ...
-               && (max(abs(before_crossing), abs(after_crossing)) > std(mddy_norm(:, state))/4) ...
-               && sign(before_crossing) ~= sign(after_crossing)
-               inflections(idx, state) = true;
-            end
-            prev = idx;
-            idx = next;
-        end
-    end
-    inflections
+%     inflections = false(size(crossings2));
+%     for state = 1:L
+%         prev = 0;
+%         idx = find(crossings2(:, state), 1);
+%         while idx < size(crossings2, 1)
+%             next = idx + find(crossings2(idx+1:end, state), 1);
+%             if isempty(next), next = size(crossings2, 1); end
+%             prev_idx = mddy_norm(prev+1:idx, state);
+%             idx_next = mddy_norm(idx+1:next, state);
+%             [~, max_prev] = max(abs(prev_idx));
+%             [~, max_next] = max(abs(idx_next));
+%             before_crossing = mddy_norm(prev+max_prev, state);
+%             after_crossing = mddy_norm(idx+max_next, state);
+%             if ~isempty(before_crossing) && ~isempty(after_crossing) ...
+%                && (max(abs(before_crossing), abs(after_crossing)) > std(mddy_norm(:, state))/4) ...
+%                && sign(before_crossing) ~= sign(after_crossing)
+%                inflections(idx, state) = true;
+%             end
+%             prev = idx;
+%             idx = next;
+%         end
+%     end
+%     for state = 1:L
+%         idx = 1;
+%         while idx < size(inflections, 1)
+%             if inflections(idx, state) && ~diff(inflections(idx:idx+1, state))
+%                 subset_abs_mddy = abs(mddy_norm(idx:idx+1, state));
+%                 inflections(idx:idx+1, state) = subset_abs_mddy == min(subset_abs_mddy);
+%                 idx = 1;
+%                 continue
+%             end
+%             idx = idx+1;
+%         end
+%     end
+%     inflections
     
-    % FILTER DOUBLE KNOTS
-    base = false(data.T, 1);
-    [~, base_ind] = min(abs(data.t' - linspace(data.t(1), data.t(end), 5)));
-    base(base_ind) = true; 
-    combined = base(2:end-1) | peaks_troughs | curvature | inflections;
-    for state = 1:L
-        idx = 1;
-        while idx < size(mddy_norm, 1)
-            if combined(idx, state) && ~diff(combined(idx:idx+1, state))
-                subset_abs_mddy = abs(mddy_norm(idx:idx+1, state));
-                combined(idx:idx+1, state) = subset_abs_mddy == max(subset_abs_mddy);
-                idx = 1;
-                continue
-            end
-            idx = idx+1;
-        end
-    end
+%     % FILTER DOUBLE KNOTS
+%     combined = peaks_troughs | curvature | inflections;
+%     for state = 1:L
+%         idx = 1;
+%         while idx < size(mddy_norm, 1)
+%             if combined(idx, state) && ~diff(combined(idx:idx+1, state))
+%                 subset_abs_mddy = abs(mddy_norm(idx:idx+1, state));
+%                 combined(idx:idx+1, state) = subset_abs_mddy == max(subset_abs_mddy);
+%                 idx = 1;
+%                 continue
+%             end
+%             idx = idx+1;
+%         end
+%     end
 
 %     for state = 1:L
 %         state
@@ -169,7 +178,7 @@ function knots = placement(data)
     
     % REMOVED KNOTS AT SECOND TO LAST TIME POINT
     subset = true(T, L);
-    subset(2:end-1, :) = combined;
+    subset(2:end-1, :) = base_curvature;
     knots = cell(1, L);
     for state = 1:L
         knots{state} = t(subset(:, state))';

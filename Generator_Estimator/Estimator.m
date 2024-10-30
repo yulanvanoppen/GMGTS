@@ -2,16 +2,22 @@ classdef Estimator < handle
     properties (Access = public)
         data                                                                % observed data struct
         system                                                              % ODE system object
+        
         stages                                                              % stages to execute
         method                                                              % method(s) to conduct inference
+        autoknots
         knots
+        
         penalization
         penalized
         lambda
+        
         interactive
+        
         lb
         ub
         grid
+        
         nmultistart
         niterSM
         tolSM
@@ -19,6 +25,7 @@ classdef Estimator < handle
         tolFS
         niterSS
         tolSS
+        
         prior
         
         GMGTS_settings                                                      % GMGTS settings struct
@@ -40,10 +47,14 @@ classdef Estimator < handle
             default_Methods = "GMGTS";
             
             initial = system.k0';
-            default_Knots = repmat({linspace(data.t(1), data.t(end), round((data.T-1)*.75)+1)}, ...
+            default_AutoKnots = true;
+            default_Knots = repmat({linspace(data.t(1), data.t(end), round((data.T-1)/2)+1)}, ...
                                    1, length(data.observed));
+                               
             default_Penalization = "curvature";
             default_Penalized = [0 Inf];
+            default_Lambda = [];
+            
             default_LB = .25 * initial;
             default_UB = 4 .* initial + .0001 * mean(initial);
             default_TimePoints = data.t(1) + (0:.1:1) * range(data.t);
@@ -59,18 +70,22 @@ classdef Estimator < handle
             parser = inputParser;
             addRequired(parser, 'data', @isstruct);
             addRequired(parser, 'system', @(x) isa(x, 'ODEIQM'));
+            
             addParameter(parser, 'Stages', default_Stages, @(x) ismember(x, 0:2));
             addParameter(parser, 'Methods', default_Methods, ...
                          @(x) all(ismember(upper(string(x)), ["GMGTS" "GTS"])));
+            addParameter(parser, 'AutoKnots', default_AutoKnots, @islogical);
             addParameter(parser, 'Knots', default_Knots, @(x) (iscell(x) && length(x) == length(data.observed) ...
                                                                && all(cellfun(@isnumeric, x))) ...
                                                            || isnumeric(x));
+                                                       
             addParameter(parser, 'Penalization', default_Penalization, ...
                          @(x) all(ismember(string(x), ["curvature" "coefficients"])));
             addParameter(parser, 'PenalizedInterval', default_Penalized, @(x) (numel(x) == 2 ||numel(x) == 2*length(data.observed)) ...
                                                                            && ((size(x, 1) == 2 && all(x(1, :) < x(2, :))) ...
                                                                            || (size(x, 2) == 2 && all(x(:, 1) < x(:, 2)))));
-            addParameter(parser, 'Lambda', [], @(x) all(x > 0))
+            addParameter(parser, 'Lambda', default_Lambda, @(x) all(x > 0))
+            
             addParameter(parser, 'InteractiveSmoothing', false, @islogical);
             addParameter(parser, 'LB', default_LB, @(x) all(x < initial));
             addParameter(parser, 'UB', default_UB, @(x) all(x > initial));
@@ -93,10 +108,11 @@ classdef Estimator < handle
             
             obj.data = parser.Results.data;
             obj.system = parser.Results.system;
+            
             obj.stages = parser.Results.Stages;
             obj.method = string(parser.Results.Methods);
+            obj.autoknots = parser.Results.AutoKnots;
             obj.knots = cell(1, length(data.observed));
-            
             parsed_knots = parser.Results.Knots;
             if ~iscell(parsed_knots)
                 parsed_knots = repmat({parsed_knots}, 1, length(data.observed));
@@ -106,6 +122,8 @@ classdef Estimator < handle
                 arranged = sort(unique([data.t(1) reshape(truncated, 1, []) data.t(end)]));
                 obj.knots{state} = (arranged - data.t(1)) / range(data.t);
             end
+            obj.autoknots = parser.Results.AutoKnots && ismember("Knots", string(parser.UsingDefaults));
+            
             obj.penalization = parser.Results.Penalization;
             obj.penalized = parser.Results.PenalizedInterval;
             if size(obj.penalized, 2) == 2, obj.penalized = obj.penalized'; end
@@ -148,9 +166,10 @@ classdef Estimator < handle
             weights = ones(length(obj.grid), obj.system.K);
             weights([1 end], :) = 0;
             
-            obj.GMGTS_settings.sm = struct('order', 4, 'knots', {obj.knots}, 'penalization', obj.penalization, ...
-                                           'penalized', obj.penalized, 'lambda', obj.lambda, 'grid', obj.grid, ...
-                                           'niter', obj.niterSM, 'tol', obj.tolSM, 'interactive', obj.interactive);
+            obj.GMGTS_settings.sm = struct('order', 4, 'autoknots', obj.autoknots, 'knots', {obj.knots}, ...
+                                           'penalization', obj.penalization, 'penalized', obj.penalized, 'lambda', obj.lambda, ...
+                                           'grid', obj.grid, 'niter', obj.niterSM, 'tol', obj.tolSM, ...
+                                           'interactive', obj.interactive);
             obj.GMGTS_settings.fs = struct('grid', obj.grid, 'weights', weights, 'initial', obj.system.k0', ...
                                            'nrep', obj.niterFS, 'tol', obj.tolFS, 'nstart', obj.nmultistart, ...
                                            'lb', obj.lb, 'ub', obj.ub, 'prior', obj.prior);

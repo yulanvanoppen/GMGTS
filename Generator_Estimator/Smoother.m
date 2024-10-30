@@ -37,11 +37,13 @@ classdef Smoother < handle
             obj.settings = settings;
             [obj.T, obj.L, obj.N] = size(obj.data.traces);                  % extract trajectory dimensions
             
+            if settings.autoknots, obj.place_knots(); end
+            
             obj.bsplines = cell(1, obj.L);
             obj.delta = cell(1, obj.L);
-            for state = 1:obj.L                                             % instantiate spline
-                obj.bsplines{state} = BSpline(settings.order, settings.knots{state});
-                obj.delta{state} = zeros(obj.bsplines{state}.card, obj.N);
+            for k = 1:obj.L                                             % instantiate spline
+                obj.bsplines{k} = BSpline(obj.settings.order, obj.settings.knots{k});
+                obj.delta{k} = zeros(obj.bsplines{k}.card, obj.N);
             end
             
             if ~isempty(settings.lambda)                                    % initial penalty multiplier
@@ -242,6 +244,86 @@ classdef Smoother < handle
 %             obj.data.dsmoothed = a .* obj.data.dsmoothed + (1-a) .* obj.data.doriginal(:, 2, :);
             
             obj.data.smoothed = max(obj.data.smoothed, 1e-12);
+        end
+        
+        
+        function place_knots(obj)
+            t = obj.data.t';
+
+            base = false(obj.T-2, obj.L);                   % 3 EQUIDISTANT BASE KNOTS
+            [~, base_ind] = unique(min(abs(t' - linspace(t(1), t(end), 5))));
+            base(base_ind(2:end-1), :) = true; 
+
+            d21 = t(2:end-1) - t(1:end-2);                  % FINITE DIFFERENCE DERIVATIVE APPROXIMATIONS
+            d31 = t(3:end) - t(1:end-2);                        % with unequal time step
+            d32 = t(3:end) - t(2:end-1);
+            y1 = obj.data.traces(1:end-2, :, :);
+            y2 = obj.data.traces(2:end-1, :, :);
+            y3 = obj.data.traces(3:end, :, :);
+
+            dy = (y3 - y2) ./ (d32 + d21);                      % unequally spaced finite differences
+            ddy = 2 * (y1./d21./d31 - y2./d32./d21 + y3./d32./d31);
+
+            zscore_dy = mean(dy, 3) ./ std(dy, 0, 3);           % means and standard deviations across cells
+            zscore_ddy = mean(ddy, 3) ./ std(ddy, 0, 3);
+                                                            % ADD ESTIMATED PEAKS AND TROUGHS
+            crossings = logical(abs(diff(sign(zscore_dy))) == 2);
+            crossings(end+1, :) = false;
+            for state = 1:obj.L                                 % find approximate points where dy = 0
+                for idx = 1:size(crossings, 1)-1
+                    if crossings(idx, state)
+                        subset_abs_mdy = abs(zscore_dy(idx:idx+1, state));
+                        crossings(idx:idx+1, state) = subset_abs_mdy == min(subset_abs_mdy);
+                    end
+                end
+            end
+            peaks_troughs = crossings & (abs(zscore_ddy) > .25);% filter noise crossings
+
+            base_peaks_troughs = base;                          % add peaks/troughs moving base points if needed
+            for state = 1:obj.L
+                for idx = 1:size(peaks_troughs, 1)
+                    if peaks_troughs(idx, state)
+                        if idx > 1 && idx < obj.T-2 && base(idx-1, state) && base(idx+1, state)
+                            base_peaks_troughs(idx-1:idx+1, state) = [false true false];
+                        elseif idx > 1 && base(idx-1, state)
+                            base_peaks_troughs(idx-1:idx, state) = [false true];
+                        elseif idx < obj.T-2 && base(idx+1, state)
+                            base_peaks_troughs(idx:idx+1, state) = [true false];
+                        else
+                            base_peaks_troughs(idx, state) = true;
+                        end
+                    end
+                end
+            end
+                                                            % ADD END OF INITIAL FAST DYNAMICS
+            curvature = abs(zscore_ddy) > 2*std(zscore_ddy);    % find first point where curvature settles
+            fast_dynamics_end = ones(1, obj.L);
+            for state = 1:obj.L
+                n_fast_dynamics = find(diff([find(curvature(:, state)); obj.T+1]) > 2, 1);
+                fast_dynamics_ind = find(curvature(:, state), n_fast_dynamics);
+                fast_dynamics_end(state) = fast_dynamics_ind(end);
+            end
+
+            base_curvature = base_peaks_troughs;                % add fast dynamics end moving base points if needed
+            for state = 1:obj.L
+                idx = fast_dynamics_end(state);
+                if idx > 1 && idx < obj.T-2 && base_peaks_troughs(idx-1, state) && base_peaks_troughs(idx+1, state)
+                    base_curvature(idx-1:idx+1, state) = [false true false];
+                elseif idx > 1 && base_peaks_troughs(idx-1, state)
+                    base_curvature(idx-1:idx, state) = [false true];
+                elseif idx < obj.T-2 && base_peaks_troughs(idx+1, state)
+                    base_curvature(idx:idx+1, state) = [true false];
+                else
+                    base_curvature(idx, state) = true;
+                end
+            end
+
+            subset = true(obj.T, obj.L);                    % ADD KNOTS AT INTERVAL ENDS
+            subset(2:end-1, :) = base_curvature;
+            obj.settings.knots = cell(1, obj.L);
+            for state = 1:obj.L                                 % normalize knots to [0, 1]
+                obj.settings.knots{state} = (t(subset(:, state))' - t(1)) / range(t);
+            end
         end
     end
 end
