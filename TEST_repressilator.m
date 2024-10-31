@@ -34,8 +34,6 @@ generated = generator.data;
 [data, ground_truth] = obfuscate(generated);
 data.beta = ground_truth.beta;
 
-knots = placement(data)
-
 
 %% Estimate ----------------------------------------------------------------
 
@@ -43,17 +41,9 @@ methods = [];
 methods = [methods "GMGTS"];
 % methods = [methods "GTS"];
 
-% estimator = Estimator(data, system ...                                      % estimator setup
-%                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
-%                       , 'Methods', methods ...                              % GMGT, GTS, or both
-%                       );
-                  
 estimator = Estimator(data, system ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'Knots', knots ...
-                      , 'PenalizedInterval', [200 1000] ...
-                      , 'Lambda', 1e-12 ...
                       );
 
 estimator.estimate();

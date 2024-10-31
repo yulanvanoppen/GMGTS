@@ -42,19 +42,8 @@ classdef FirstStage < handle
             obj.variances_XdX = zeros(2 * system.K * obj.T, 2 * system.K * obj.T, obj.N);
             obj.variances_beta_fs = repmat(eye(system.P), 1, 1, obj.N);
             
-%             if settings.interactive
-%                 app = initialize_app(obj);
-%                 waitfor(app.FinishButton, 'UserData')
-%                 if isvalid(app)
-% %                     obj.data = app.fs.data;
-%                     delete(app)
-%                 else
-%                     obj.initialize();
-%                 end
-%             else
-                obj.initialize();
-                if obj.L < system.K, obj.integrate(settings.nrep == 0); end
-%             end
+            obj.initialize();
+            if obj.L < system.K, obj.integrate(settings.nrep == 0); end
         end
         
         
@@ -123,9 +112,6 @@ classdef FirstStage < handle
             bfs = repmat(exp(opt), obj.N, 1); % .* exp(.1 * randn(obj.N, length(opt)))
             obj.beta_fs_init = bfs;
             obj.perturb();
-            
-%             obj.beta_fs_init = obj.data.beta;
-%             obj.beta_fs = obj.data.beta;
         end
 
 
@@ -212,28 +198,15 @@ classdef FirstStage < handle
         
         
         function covariances_full(obj)
-%             Z = kron(eye(obj.L), obj.data.basis');
-%             ddZ = kron(eye(obj.L), obj.data.ddbasis');
-%             Z_fs = kron(eye(obj.L), obj.data.basis_fs');
-%             dZ_fs = kron(eye(obj.L), obj.data.dbasis_fs') / range(obj.data.t);
-%             LD2 = kron(diag(obj.data.lambda), eye(size(obj.data.basis, 1))) ...
-%                     * ddZ' * diag(repmat(obj.data.penalty_ind, 1, obj.L)) * ddZ;
-                
             Z = blkdiag(obj.data.basis{:})';
-            ddZ = blkdiag(obj.data.ddbasis{:})';
             Z_fs = blkdiag(obj.data.basis_fs{:})';
             dZ_fs = blkdiag(obj.data.dbasis_fs{:})' / range(obj.data.t);
-            Lambda_blocks = arrayfun(@(i) obj.data.lambda(i) * eye(size(obj.data.basis{i}, 1)), ...
-                                     1:length(obj.data.lambda), 'UniformOutput', false);
-            LD2 = blkdiag(Lambda_blocks{:}) * ddZ' * diag(horzcat(obj.data.penalty_ind{:})) * ddZ;    
             
             dRHS_all = obj.system.df(obj.data.smoothed, obj.data.t, obj.beta_fs);
             
             for i = obj.not_converged
                 S = diag(reshape(obj.data.variances_sm(:, :, i) + 1e-12, 1, []));
-                unp_prec = Z' * (S \ Z);
-                inv_pen_prec = svdinv(unp_prec + LD2);
-                var_delta = inv_pen_prec * unp_prec * inv_pen_prec;
+                var_delta = svdinv(Z' * (S \ Z));
                 var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];
                 
                 dF = zeros(obj.system.K * obj.T);
@@ -258,21 +231,10 @@ classdef FirstStage < handle
             
             states = obj.smoothed_fitted;
             dstates = obj.dsmoothed_fitted;
-            
-%             Z = kron(eye(obj.L), obj.data.basis');
-%             ddZ = kron(eye(obj.L), obj.data.ddbasis');
-%             Z_fs = kron(eye(obj.L), obj.data.basis_fs');
-%             dZ_fs = kron(eye(obj.L), obj.data.dbasis_fs') / range(obj.data.t);
-%             LD2 = kron(diag(obj.data.lambda), eye(size(obj.data.basis, 1))) ...
-%                     * ddZ' * diag(repmat(obj.data.penalty_ind, 1, obj.L)) * ddZ;
                 
             Z = blkdiag(obj.data.basis{:})';
-            ddZ = blkdiag(obj.data.ddbasis{:})';
             Z_fs = blkdiag(obj.data.basis_fs{:})';
             dZ_fs = blkdiag(obj.data.dbasis_fs{:})' / range(obj.data.t);
-            Lambda_blocks = arrayfun(@(i) obj.data.lambda(i) * eye(size(obj.data.basis{i}, 1)), ...
-                                     1:length(obj.data.lambda), 'UniformOutput', false);
-            LD2 = blkdiag(Lambda_blocks{:}) * ddZ' * diag(horzcat(obj.data.penalty_ind{:})) * ddZ;    
 
             if rep > 1
                 g_all = obj.system.g(states, obj.data.t);
@@ -283,9 +245,7 @@ classdef FirstStage < handle
             
             for i = 1:obj.N
                 S = diag(reshape(obj.data.variances_sm(:, :, i) + 1e-12, 1, []));
-                unp_prec = Z' * (S \ Z);
-                inv_pen_prec = svdinv(unp_prec + LD2);
-                var_delta = inv_pen_prec * unp_prec * inv_pen_prec;
+                var_delta = svdinv(Z' * (S \ Z));
                 var_XdX = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];
                 
                 dX = reshape(dstates(wt_ind, :, i), [], 1);
@@ -337,20 +297,9 @@ classdef FirstStage < handle
             states = obj.smoothed_fitted;
             dstates = obj.dsmoothed_fitted;
             
-%             Z = kron(eye(obj.L), obj.data.basis');
-%             ddZ = kron(eye(obj.L), obj.data.ddbasis');
-%             Z_fs = kron(eye(obj.L), obj.data.basis_fs');
-%             dZ_fs = kron(eye(obj.L), obj.data.dbasis_fs') / range(obj.data.t);
-%             LD2 = kron(diag(obj.data.lambda), eye(size(obj.data.basis, 1))) ...
-%                     * ddZ' * diag(repmat(obj.data.penalty_ind, 1, obj.L)) * ddZ;
-            
             Z = blkdiag(obj.data.basis{:})';
-            ddZ = blkdiag(obj.data.ddbasis{:})';
             Z_fs = blkdiag(obj.data.basis_fs{:})';
-            dZ_fs = blkdiag(obj.data.dbasis_fs{:})' / range(obj.data.t);
-            Lambda_blocks = arrayfun(@(i) obj.data.lambda(i) * eye(size(obj.data.basis{i}, 1)), ...
-                                     1:length(obj.data.lambda), 'UniformOutput', false);
-%             LD2 = blkdiag(Lambda_blocks{:}) * ddZ' * diag(horzcat(obj.data.penalty_ind{:})) * ddZ;    
+            dZ_fs = blkdiag(obj.data.dbasis_fs{:})' / range(obj.data.t); 
 
             if rep > 1
                 g_all = obj.system.g(states, obj.data.t);
@@ -361,11 +310,6 @@ classdef FirstStage < handle
             end
             
             dRHS_all = obj.system.df(states, obj.data.t, obj.beta_fs);
-            
-%             gradient_all = obj.system.sensitivity(obj.beta_fs, obj.data, obj.data.t);
-%             dgradient_all_beta = permute(reshape(permute(obj.system.g(obj.fitted_fs, obj.data.t), [2 1 3]), obj.system.P, obj.T, obj.system.K, obj.N), [2 3 1 4]);
-%             dgradient_all_states =  obj.system.dfdx(states, gradient_all, obj.data.t, obj.beta_fs);
-%             dgradient_all = dgradient_all_beta + dgradient_all_states;
 
             beta_transf = permute(obj.beta_fs, [3 2 1]);
             epsilon = max(1e-8, beta_transf * .001);
@@ -386,7 +330,6 @@ classdef FirstStage < handle
             gradient_all = permute((traces_pm_eps(:, :, :, 1, :) - traces_pm_eps(:, :, :, 2, :)) .* eps_denom, [1:3 5 4]);
             dgradient_all = permute((dtraces_pm_eps(:, :, :, 1, :) - dtraces_pm_eps(:, :, :, 2, :)) .* eps_denom, [1:3 5 4]);
             
-%             fprintf('first not-converged: %d\n', obj.not_converged(1))
             for i = cells
                 % DEFINITION OF dF_dbeta & ddF_dbeta
                 dF_dbeta = reshape(gradient_all(:, :, :, i), [], obj.system.P);
@@ -396,10 +339,7 @@ classdef FirstStage < handle
                     % DEFINITION OF Var XO
 %                     S = diag(reshape(obj.data.variances_sm(:, :, i) + 1e-12, 1, []));
                     S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
-                    unp_prec = Z' * (S \ Z);
-                    LD2 = blkdiag(Lambda_blocks{:}) * ddZ' * diag(horzcat(obj.data.penalty_ind{:}) .* diag(S.^-1)') * ddZ;
-                    inv_pen_prec = svdinv(unp_prec + LD2);
-                    var_delta = inv_pen_prec * unp_prec * inv_pen_prec;
+                    var_delta = svdinv(Z' * (S \ Z));
                     var_XOdXO = [Z_fs; dZ_fs] * var_delta * [Z_fs; dZ_fs]';
 
                     % DEFINITION OF Var beta

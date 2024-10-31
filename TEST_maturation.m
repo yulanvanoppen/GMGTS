@@ -11,7 +11,7 @@ close all
 
 load('system_maturation_delay.mat')
 
-first_obs = 2;
+first_obs = 1;
 dt = 5;
 noise_level = .1;
 seed = 1;
@@ -35,7 +35,7 @@ data.beta = ground_truth.beta;
 data.original = ground_truth.original;
 data.doriginal = ground_truth.doriginal;
 
-knots = placement(data)
+% knots = placement(data)
 
 %% Estimate ----------------------------------------------------------------
 
@@ -43,25 +43,13 @@ methods = [];
 methods = [methods "GMGTS"];
 % methods = [methods "GTS"];
 
-% estimator = Estimator(data, system ...                                      % estimator setup
-%                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
-%                       , 'Methods', methods ...                              % GMGT, GTS, or both
-%                       , 'Knots', [10 50] ...
-%                       , 'PenalizedInterval', [0 200] ...
-%                       , 'LB', [.001 .01] ...
-%                       , 'UB', [1 1] ...
-%                       );
-%                   
 estimator = Estimator(data, system ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'Knots', [0 10 50] ...
-                      , 'PenalizedInterval', [200 1000] ...
-                      , 'Lambda', 1e-12 ...
+                      , 'InteractiveSmoothing', true ...
                       );
 
 estimator.estimate();
-fprintf("Estimated Lambda: %.4f\n", estimator.results_GMGTS.lambda);
 
 % close all
 plot(estimator, 'True', ground_truth ...

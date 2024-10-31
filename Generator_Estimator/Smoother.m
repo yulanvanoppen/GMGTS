@@ -4,7 +4,6 @@ classdef Smoother < handle
         T_fs                                                                % number of optimized time points
         L                                                                   % system dimension
         N                                                                   % number of cells
-        penalty_ind
     end
     
     properties (SetAccess = private)
@@ -15,8 +14,6 @@ classdef Smoother < handle
         
         iteration
         delta
-        lambda                                                              % penalty multiplier
-        lambda_mult
         B                                                                   % B-spline basis evaluated at t
         dB                                                                  % corresponding first derivative
         ddB                                                                 % corresponding second derivative
@@ -46,17 +43,20 @@ classdef Smoother < handle
                 obj.delta{k} = zeros(obj.bsplines{k}.card, obj.N);
             end
             
-            if ~isempty(settings.lambda)                                    % initial penalty multiplier
-                obj.lambda = reshape(settings.lambda, 1, []) .* ones(1, obj.L);
-            else
-                obj.lambda = zeros(1, obj.L);
-            end
-            obj.lambda_mult = ones(1, obj.L);
-            
             obj.variances_sm = zeros(obj.T, obj.L, obj.N);
             obj.variances_fs = zeros(length(settings.grid), obj.L, obj.N);  % measurement error variances
             obj.sigma = zeros(1, obj.L);
             obj.tau = zeros(1, obj.L);
+        end
+
+        function update_knots(obj, knots)
+            if iscell(knots)
+                obj.settings.knots = knots;
+            else
+                for k = 1:obj.L
+                    obj.settings.knots{k} = knots;
+                end
+            end
         end
         
         
@@ -93,12 +93,10 @@ classdef Smoother < handle
             
             obj.B = cell(1, obj.L);
             obj.dB = cell(1, obj.L);
-            obj.ddB = cell(1, obj.L);
             obj.B_fine = cell(1, obj.L);
             obj.dB_fine = cell(1, obj.L);
             obj.data.basis_fs = cell(1, obj.L);
             obj.data.dbasis_fs = cell(1, obj.L);
-            obj.penalty_ind = cell(1, obj.L);
             
             for k = 1:obj.L
                 obj.B{k} = obj.bsplines{k}.basis(grid);                     % B-spline basis evaluated at t
@@ -107,27 +105,10 @@ classdef Smoother < handle
                 obj.data.dbasis_fs{k} = obj.bsplines{k}.basis_diff(grid_fs); 
                 obj.B_fine{k} = obj.bsplines{k}.basis(grid_fine);           % save for smooth plotting
                 obj.dB_fine{k} = obj.bsplines{k}.basis_diff(grid_fine);
-                
-                if obj.settings.penalization == "curvature"                 % corresponding second derivative
-                    obj.ddB{k} = obj.bsplines{k}.basis_ddiff(grid) / range(obj.data.t)^2;
-                    obj.penalty_ind{k} = obj.settings.penalized(1, k) <= obj.data.t ...
-                                             & obj.data.t <= obj.settings.penalized(2, k);
-                                         
-                elseif obj.settings.penalization == "coefficients"
-                    D = zeros(obj.bsplines{k}.card);
-                    D = spdiags(repmat([-1 2 -1], obj.bsplines{k}.card, 1), [-1 0 1], D);
-                    obj.ddB{k} = D(2:end-1, :)';
-                    penalty_ind_t = obj.settings.penalized(1, k) <= obj.data.t ...
-                                    & obj.data.t <= obj.settings.penalized(2, k);
-                    penalty_ind_combined = movmin(any(obj.B{k} > 0 & penalty_ind_t, 2), 3);
-                    obj.penalty_ind{k} = penalty_ind_combined(2:end-1)';
-                end
             end
 
             obj.data.basis = obj.B;                                         % save for later use
             obj.data.dbasis = obj.dB;
-            obj.data.ddbasis = obj.ddB;
-            obj.data.penalty_ind = obj.penalty_ind;
 
             for iter = 1:obj.settings.niter                          % FWLS spline coefficient estimates
                 obj.iteration = iter;
@@ -139,7 +120,6 @@ classdef Smoother < handle
                 end
             end
             
-            obj.data.lambda = obj.lambda;                                   % save penalty multiplier
             obj.data.variances_sm = obj.variances_sm;
             obj.data.variances = obj.variances_fs;                          % save variance estimates
             obj.fit();                                                      % compute splines
@@ -149,16 +129,10 @@ classdef Smoother < handle
         
                                             
         function update_coefficients(obj)                               % Spline coefficients from current variances
-            if isempty(obj.settings.lambda) && obj.iteration > 1
-                obj.lambda = obj.GCV_lambda();                              % minimize Generalized CV error
-            end
-            
             for i = 1:obj.N                                                 % W: correcting weights from variances
                 for k = 1:obj.L                                             % penalty: lambda * L2(spline basis/coefficients)
                     W = diag(max(obj.variances_sm(:, k, i), 1e-7).^-1);     % delta_ik: LS estimate
-                    penalty = obj.lambda(k) * obj.ddB{k} * (diag(obj.penalty_ind{k}) .* W) * obj.ddB{k}';
-                    obj.delta{k}(:, i) = svdinv(obj.B{k} * W * obj.B{k}' + penalty) ...
-                                         * obj.B{k} * W * obj.data.traces(:, k, i);
+                    obj.delta{k}(:, i) = svdinv(obj.B{k} * W * obj.B{k}') * obj.B{k} * W * obj.data.traces(:, k, i);
                 end
             end
         end
@@ -183,45 +157,6 @@ classdef Smoother < handle
                 obj.variances_sm(:, k, :) = reshape(design * coefficients', obj.T, 1, obj.N);
                 obj.variances_fs(:, k, :) = reshape(design_fs * coefficients', obj.T_fs, 1, obj.N);
             end
-        end
-        
-        
-        function lambda = GCV_lambda(obj)                               % Generalized CV minimizer
-            options = optimoptions('fmincon', 'Display', 'off', 'OptimalityTolerance', 1e-3);
-            
-            ncells = 10;
-%             ncells = obj.N;
-            lambda = zeros(obj.L, ncells);                                  % penalty multiplier
-            for k = 1:obj.L
-                for rep = 1:ncells
-%                     i = randi(obj.N);
-                    i = rep + ncells;
-                    GCV_current = Inf;
-                    for start = 1:(1 + 9*(obj.iteration==2))
-%                         if obj.iteration == 1, init = 6; else, init = log(obj.lambda(k)); end
-                        if obj.iteration == 2, init = unifrnd(-15, 15); else, init = log(obj.lambda(k)); end
-                        [loglambda_new, GCV_new] = fmincon(@(log_lambda_k) obj.GCV(log_lambda_k, i, k), ...
-                                                           init, [], [], [], [], -15, 15, [], options);
-                        if GCV_new < GCV_current
-                            GCV_current = GCV_new;
-                            lambda(k, rep) = exp(loglambda_new);
-                        end
-                    end
-                end
-            end
-            lambda = exp(mean(log(lambda), 2))';
-            lambda = lambda .* obj.lambda_mult;
-%             lambda = mean(lambda, 2);
-        end
-        
-        
-        function error = GCV(obj, log_lambda_k, i, k)
-            Y = obj.data.traces(:, k, i);
-            W = diag(max(obj.variances_sm(:, k, i), 1e-7).^-1);
-            penalty = obj.ddB{k} * (diag(obj.penalty_ind{k}) .* W) * obj.ddB{k}';
-                                                                            % svdinv if necessary
-            A = sqrt(W) * obj.B{k}' * ((obj.B{k} * W * obj.B{k}' + exp(log_lambda_k) * penalty) \ obj.B{k} * sqrt(W));
-            error = obj.T * norm((eye(obj.T) - A) * Y)^2 / trace(eye(obj.T) - A)^2;
         end
         
         
@@ -251,7 +186,8 @@ classdef Smoother < handle
             t = obj.data.t';
 
             base = false(obj.T-2, obj.L);                   % 3 EQUIDISTANT BASE KNOTS
-            [~, base_ind] = unique(min(abs(t' - linspace(t(1), t(end), 5))));
+            [~, base_ind] = min(abs(t - linspace(t(1), t(end), 5)));
+            base_ind = unique(base_ind);
             base(base_ind(2:end-1), :) = true; 
 
             d21 = t(2:end-1) - t(1:end-2);                  % FINITE DIFFERENCE DERIVATIVE APPROXIMATIONS
@@ -271,7 +207,7 @@ classdef Smoother < handle
             crossings(end+1, :) = false;
             for state = 1:obj.L                                 % find approximate points where dy = 0
                 for idx = 1:size(crossings, 1)-1
-                    if crossings(idx, state)
+                    if crossings(idx, state)                    % select dy before or after crossing closest to zero
                         subset_abs_mdy = abs(zscore_dy(idx:idx+1, state));
                         crossings(idx:idx+1, state) = subset_abs_mdy == min(subset_abs_mdy);
                     end
@@ -282,7 +218,7 @@ classdef Smoother < handle
             base_peaks_troughs = base;                          % add peaks/troughs moving base points if needed
             for state = 1:obj.L
                 for idx = 1:size(peaks_troughs, 1)
-                    if peaks_troughs(idx, state)
+                    if peaks_troughs(idx, state)                % remove adjacent base points
                         if idx > 1 && idx < obj.T-2 && base(idx-1, state) && base(idx+1, state)
                             base_peaks_troughs(idx-1:idx+1, state) = [false true false];
                         elseif idx > 1 && base(idx-1, state)
@@ -298,7 +234,7 @@ classdef Smoother < handle
                                                             % ADD END OF INITIAL FAST DYNAMICS
             curvature = abs(zscore_ddy) > 2*std(zscore_ddy);    % find first point where curvature settles
             fast_dynamics_end = ones(1, obj.L);
-            for state = 1:obj.L
+            for state = 1:obj.L                                 % first point with two or more regular curvatures
                 n_fast_dynamics = find(diff([find(curvature(:, state)); obj.T+1]) > 2, 1);
                 fast_dynamics_ind = find(curvature(:, state), n_fast_dynamics);
                 fast_dynamics_end(state) = fast_dynamics_ind(end);
@@ -306,7 +242,7 @@ classdef Smoother < handle
 
             base_curvature = base_peaks_troughs;                % add fast dynamics end moving base points if needed
             for state = 1:obj.L
-                idx = fast_dynamics_end(state);
+                idx = fast_dynamics_end(state);                 % remove adjacent base points
                 if idx > 1 && idx < obj.T-2 && base_peaks_troughs(idx-1, state) && base_peaks_troughs(idx+1, state)
                     base_curvature(idx-1:idx+1, state) = [false true false];
                 elseif idx > 1 && base_peaks_troughs(idx-1, state)
@@ -320,7 +256,6 @@ classdef Smoother < handle
 
             subset = true(obj.T, obj.L);                    % ADD KNOTS AT INTERVAL ENDS
             subset(2:end-1, :) = base_curvature;
-            obj.settings.knots = cell(1, obj.L);
             for state = 1:obj.L                                 % normalize knots to [0, 1]
                 obj.settings.knots{state} = (t(subset(:, state))' - t(1)) / range(t);
             end
