@@ -50,12 +50,11 @@ classdef Smoother < handle
         end
 
         function update_knots(obj, knots)
-            if iscell(knots)
-                obj.settings.knots = knots;
-            else
-                for k = 1:obj.L
-                    obj.settings.knots{k} = knots;
-                end
+            if iscell(knots), obj.settings.knots = knots; end
+            for k = 1:obj.L
+                if ~iscell(knots), obj.settings.knots{k} = knots; end
+                obj.bsplines{k} = BSpline(obj.settings.order, obj.settings.knots{k});
+                obj.delta{k} = zeros(obj.bsplines{k}.card, obj.N);
             end
         end
         
