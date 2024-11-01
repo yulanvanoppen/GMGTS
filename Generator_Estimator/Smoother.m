@@ -1,22 +1,23 @@
 classdef Smoother < handle
     properties (Access = private)
+        bsplines                                                            % nested object controlling splines from B-splines
+        
         T                                                                   % number of time points
         T_fs                                                                % number of optimized time points
         L                                                                   % system dimension
         N                                                                   % number of cells
+        
+        iteration
     end
     
     properties (SetAccess = private)
         data                                                                % general data and output container
         system
         settings
-        bsplines                                                             % nested object controlling splines from B-splines
         
-        iteration
         delta
         B                                                                   % B-spline basis evaluated at t
         dB                                                                  % corresponding first derivative
-        ddB                                                                 % corresponding second derivative
         B_fine
         dB_fine
         smoothed                                                            % smoothed data
@@ -38,10 +39,7 @@ classdef Smoother < handle
             
             obj.bsplines = cell(1, obj.L);
             obj.delta = cell(1, obj.L);
-            for k = 1:obj.L                                             % instantiate spline
-                obj.bsplines{k} = BSpline(obj.settings.order, obj.settings.knots{k});
-                obj.delta{k} = zeros(obj.bsplines{k}.card, obj.N);
-            end
+            obj.update_knots(obj.settings.knots);
             
             obj.variances_sm = zeros(obj.T, obj.L, obj.N);
             obj.variances_fs = zeros(length(settings.grid), obj.L, obj.N);  % measurement error variances
@@ -49,13 +47,34 @@ classdef Smoother < handle
             obj.tau = zeros(1, obj.L);
         end
 
-        function update_knots(obj, knots)
-            if iscell(knots), obj.settings.knots = knots; end
-            for k = 1:obj.L
-                if ~iscell(knots), obj.settings.knots{k} = knots; end
+        
+        function update_knots(obj, knots, states)
+            if nargin < 3, states = 1:obj.L; end
+            for k = states
+                obj.settings.knots{k} = knots{k};                           % reset bases and coefficients
                 obj.bsplines{k} = BSpline(obj.settings.order, obj.settings.knots{k});
                 obj.delta{k} = zeros(obj.bsplines{k}.card, obj.N);
             end
+            
+            grid = (obj.data.t - obj.data.t(1)) / range(obj.data.t);        % scaled time grid
+            grid_fine = linspace(0, 1, 81);                                 % scaled optimized time grid
+            grid_fs = (obj.settings.grid - obj.data.t(1)) / range(obj.data.t);
+            obj.T_fs = length(grid_fs);
+            
+            [obj.B, obj.dB, obj.B_fine, obj.dB_fine, ...
+                    obj.data.basis_fs, obj.data.dbasis_fs] = deal(cell(1, obj.L));
+            
+            for k = 1:obj.L
+                obj.B{k} = obj.bsplines{k}.basis(grid);                     % B-spline basis evaluated at t
+                obj.dB{k} = obj.bsplines{k}.basis_diff(grid);               % corresponding first derivative
+                obj.data.basis_fs{k} = obj.bsplines{k}.basis(grid_fs);      % save for later use
+                obj.data.dbasis_fs{k} = obj.bsplines{k}.basis_diff(grid_fs); 
+                obj.B_fine{k} = obj.bsplines{k}.basis(grid_fine);           % save for smooth plotting
+                obj.dB_fine{k} = obj.bsplines{k}.basis_diff(grid_fine);
+            end
+
+            obj.data.basis = obj.B;                                         % save for later use
+            obj.data.dbasis = obj.dB;
         end
         
         
@@ -64,7 +83,6 @@ classdef Smoother < handle
                 app = smoothing_new(obj);
                 waitfor(app.FinishButton, 'UserData')
                 if isvalid(app)
-                    obj.data = app.smoother.data;
                     delete(app)
                 else
                     obj.optimize()
@@ -82,38 +100,15 @@ classdef Smoother < handle
         end
         
         
-        function optimize(obj)
-            tic
+        function optimize(obj, states)
+            if nargin == 1, states = 1:obj.L; end
+            if length(states) ~= 1, tic, end
             
-            grid = (obj.data.t - obj.data.t(1)) / range(obj.data.t);        % scaled time grid
-            grid_fine = linspace(0, 1, 201);                                % scaled optimized time grid
-            grid_fs = (obj.settings.grid - obj.data.t(1)) / range(obj.data.t);
-            obj.T_fs = length(grid_fs);
-            
-            obj.B = cell(1, obj.L);
-            obj.dB = cell(1, obj.L);
-            obj.B_fine = cell(1, obj.L);
-            obj.dB_fine = cell(1, obj.L);
-            obj.data.basis_fs = cell(1, obj.L);
-            obj.data.dbasis_fs = cell(1, obj.L);
-            
-            for k = 1:obj.L
-                obj.B{k} = obj.bsplines{k}.basis(grid);                     % B-spline basis evaluated at t
-                obj.dB{k} = obj.bsplines{k}.basis_diff(grid);               % corresponding first derivative
-                obj.data.basis_fs{k} = obj.bsplines{k}.basis(grid_fs);      % save for later use
-                obj.data.dbasis_fs{k} = obj.bsplines{k}.basis_diff(grid_fs); 
-                obj.B_fine{k} = obj.bsplines{k}.basis(grid_fine);           % save for smooth plotting
-                obj.dB_fine{k} = obj.bsplines{k}.basis_diff(grid_fine);
-            end
-
-            obj.data.basis = obj.B;                                         % save for later use
-            obj.data.dbasis = obj.dB;
-
-            for iter = 1:obj.settings.niter                          % FWLS spline coefficient estimates
+            for iter = 1:obj.settings.niter                             % FWLS spline coefficient estimates
                 obj.iteration = iter;
                 delta_old = obj.delta; 
-                obj.update_coefficients();                     
-                obj.update_variances();
+                obj.update_coefficients(states);                     
+                obj.update_variances(states);
                 if eucl_rel(delta_old', obj.delta') < obj.settings.tol      % check convergence
                     break
                 end
@@ -123,13 +118,13 @@ classdef Smoother < handle
             obj.data.variances = obj.variances_fs;                          % save variance estimates
             obj.fit();                                                      % compute splines
             
-            obj.data.toc_sm = toc;
+            if length(states) ~= 1, obj.data.toc_sm = toc; end
         end
         
                                             
-        function update_coefficients(obj)                               % Spline coefficients from current variances
+        function update_coefficients(obj, states)                       % Spline coefficients from current variances
             for i = 1:obj.N                                                 % W: correcting weights from variances
-                for k = 1:obj.L                                             % penalty: lambda * L2(spline basis/coefficients)
+                for k = states                                              % penalty: lambda * L2(spline basis/coefficients)
                     W = diag(max(obj.variances_sm(:, k, i), 1e-7).^-1);     % delta_ik: LS estimate
                     obj.delta{k}(:, i) = svdinv(obj.B{k} * W * obj.B{k}') * obj.B{k} * W * obj.data.traces(:, k, i);
                 end
@@ -137,8 +132,8 @@ classdef Smoother < handle
         end
         
         
-        function update_variances(obj)                                  % Estimate variances from current splines
-            for k = 1:obj.L
+        function update_variances(obj, states)                          % Estimate variances from current splines
+            for k = states
                 predicted = obj.B{k}' * reshape(obj.delta{k}, obj.bsplines{k}.card, obj.N);
                 predicted_fs = obj.data.basis_fs{k}' * reshape(obj.delta{k}, obj.bsplines{k}.card, obj.N);
                 design = [ones(obj.N * obj.T, 1) flatten(predicted).^2];
@@ -162,8 +157,8 @@ classdef Smoother < handle
         function fit(obj)                                               % Fitted splines from estimated coefficients
             obj.data.smoothed = zeros(obj.T_fs, obj.L, obj.N);              % smoothed data
             obj.data.dsmoothed = zeros(obj.T_fs, obj.L, obj.N);             % smoothed derivative
-            obj.data.smoothed_fine = zeros(201, obj.L, obj.N);              % same for finer time grid
-            obj.data.dsmoothed_fine = zeros(201, obj.L, obj.N);             % smoothed derivative
+            obj.data.smoothed_fine = zeros(81, obj.L, obj.N);              % same for finer time grid
+            obj.data.dsmoothed_fine = zeros(81, obj.L, obj.N);             % smoothed derivative
             
             for i = 1:obj.N                                                 % coefficients to spline interpolants
                 for k = 1:obj.L
@@ -184,12 +179,12 @@ classdef Smoother < handle
         function place_knots(obj)
             t = obj.data.t';
 
-            base = false(obj.T-2, obj.L);                   % 3 EQUIDISTANT BASE KNOTS
+            base = false(obj.T-2, obj.L);                   % Three equidistant base knots
             [~, base_ind] = min(abs(t - linspace(t(1), t(end), 5)));
             base_ind = unique(base_ind);
             base(base_ind(2:end-1), :) = true; 
 
-            d21 = t(2:end-1) - t(1:end-2);                  % FINITE DIFFERENCE DERIVATIVE APPROXIMATIONS
+            d21 = t(2:end-1) - t(1:end-2);                  % Finite difference derivative approximations
             d31 = t(3:end) - t(1:end-2);                        % with unequal time step
             d32 = t(3:end) - t(2:end-1);
             y1 = obj.data.traces(1:end-2, :, :);
@@ -201,7 +196,7 @@ classdef Smoother < handle
 
             zscore_dy = mean(dy, 3) ./ std(dy, 0, 3);           % means and standard deviations across cells
             zscore_ddy = mean(ddy, 3) ./ std(ddy, 0, 3);
-                                                            % ADD ESTIMATED PEAKS AND TROUGHS
+                                                            % Add estimated peaks and troughs
             crossings = logical(abs(diff(sign(zscore_dy))) == 2);
             crossings(end+1, :) = false;
             for state = 1:obj.L                                 % find approximate points where dy = 0
@@ -230,7 +225,7 @@ classdef Smoother < handle
                     end
                 end
             end
-                                                            % ADD END OF INITIAL FAST DYNAMICS
+                                                            % Add end of initial fast dynamics
             curvature = abs(zscore_ddy) > 2*std(zscore_ddy);    % find first point where curvature settles
             fast_dynamics_end = ones(1, obj.L);
             for state = 1:obj.L                                 % first point with two or more regular curvatures
@@ -253,7 +248,7 @@ classdef Smoother < handle
                 end
             end
 
-            subset = true(obj.T, obj.L);                    % ADD KNOTS AT INTERVAL ENDS
+            subset = true(obj.T, obj.L);                    % Add knots at interval ends
             subset(2:end-1, :) = base_curvature;
             for state = 1:obj.L                                 % normalize knots to [0, 1]
                 obj.settings.knots{state} = (t(subset(:, state))' - t(1)) / range(t);
