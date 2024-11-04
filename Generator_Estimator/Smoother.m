@@ -1,5 +1,8 @@
 classdef Smoother < handle
-    properties (Access = private)
+    properties (SetAccess = private)
+        data                                                                % general data and output container
+        system
+        settings
         bsplines                                                            % nested object controlling splines from B-splines
         
         T                                                                   % number of time points
@@ -8,32 +11,24 @@ classdef Smoother < handle
         L                                                                   % system dimension
         N                                                                   % number of cells
         
-        iteration
-    end
-    
-    properties (SetAccess = private)
-        data                                                                % general data and output container
-        system
-        settings
-
         scaled
         scaled_fs
         scaled_fine
         
-        delta
-
         B                                                                   % B-spline basis evaluated at t
         dB                                                                  % corresponding first derivative
         B_fine
         dB_fine
 
+        delta
+
         sigma
         tau
 
-        smoothed                                                            % smoothed data
-        dsmoothed                                                           % smoothed derivative
         variances_sm
         variances_fs
+        
+        iteration
     end
     
     methods

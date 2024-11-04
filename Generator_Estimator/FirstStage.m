@@ -1,49 +1,46 @@
 classdef FirstStage < handle
-    properties (Access = private)
-        T                                                                   % number of time points
-        L                                                                   % number of observed states
-        N                                                                   % population size
-        
-        smoothed_fitted                                                     % combination of predictions (hidden states)
-        dsmoothed_fitted                                                    % and smoothing (observed states) + derivatives
-    end
-    
-    properties (Access = public)
+    properties (SetAccess = private)
         data                                                                % data aggregate struct
         system                                                              % nested object controlling the ODE system
         settings                                                            % weights and loop controls
         
-        init_hess
-        beta_fs_init
-        perturbation = .2
-        beta_fs                                                             % cell-specific parameter estimates
-        variances_beta_fs
-        variances_fs                                                        % spline/ode gradient error variances
-        variances_XdX
-        Hs
-        convergence_steps
-        not_converged
+        T                                                                   % number of time points
+        L                                                                   % number of observed states
+        N                                                                   % population size
         
+        beta_fs                                                             % cell-specific parameter estimates
+        V                                                                   % spline/ode gradient error variances
+        varXdX                                                              % state and gradient covariances
+        varbeta                                                             % uncertainty estimates of beta
+        
+        convergence_steps                                                   % relative iteration steps
+        not_converged                                                       % indices of cells that have not yet converged
+        
+        smoothed_fitted                                                     % combination of predictions (hidden states)
+        dsmoothed_fitted                                                    % and smoothing (observed states) + derivatives
         fitted_fs                                                           % predictions + derivatives
         dfitted_fs
     end
     
     methods
         function obj = FirstStage(data, system, settings)               % Constructor
-            obj.data = data;
-            obj.system = system;
-            obj.settings = settings;
-                           
-            [obj.T, obj.L, obj.N] = size(data.smoothed);                    % extract from trajectory dimensions
-            obj.beta_fs = repmat(settings.initial, obj.N, 1);               % repeat initial estimate for each cell
-            obj.convergence_steps = ones(1, obj.N);
-            obj.not_converged = 1:obj.N;
-            obj.variances_fs = repmat(eye(system.K * obj.T), 1, 1, obj.N);
-            obj.variances_XdX = zeros(2 * system.K * obj.T, 2 * system.K * obj.T, obj.N);
-            obj.variances_beta_fs = repmat(eye(system.P), 1, 1, obj.N);
+            obj.data = data;                                                % experimental and smoothing data
+            obj.system = system;                                            % ODE system
+            obj.settings = settings;                                        % hyperparameters
             
-            obj.initialize();
-            if obj.L < system.K, obj.integrate(settings.nrep == 0); end
+            [obj.T, obj.L, obj.N] = size(data.smoothed);                    % extract from trajectory dimensions
+            
+            obj.convergence_steps = ones(1, obj.N);                         % ensure no cells are considered converged
+            obj.not_converged = 1:obj.N;
+            
+            obj.V = repmat(eye(system.K * obj.T), 1, 1, obj.N);
+            obj.varXdX = zeros(2 * system.K * obj.T, 2 * system.K * obj.T, obj.N);
+            obj.varbeta = repmat(eye(system.P), 1, 1, obj.N);
+            
+            if obj.L < system.K
+                obj.initialize()                                            % numerically optimize
+                obj.integrate(settings.nrep == 0)                           % save solution if 'converged'
+            end
         end
         
         
@@ -54,7 +51,7 @@ classdef FirstStage < handle
             if obj.L == obj.system.K                                        % full observation
                 disp('Full observation GMGTS: Gradient matching only')
             else
-                disp('Partial observation GMGTS: Iterative scheme')
+                disp('Partial observation GMGTS: Extended iterative scheme')
             end
 
             if obj.settings.nrep == 0, obj.estimate_covariances(1), end
@@ -62,13 +59,11 @@ classdef FirstStage < handle
             for rep = 1:obj.settings.nrep
                 beta_old = obj.beta_fs;
 
-                if rep > 1 && obj.L < obj.system.K, obj.integrate; end
-%                 if rep == 1
-                obj.estimate_covariances(rep);
-%                 end
-                obj.update_parameters;                           % gradient matching
+                if rep > 1 && obj.L < obj.system.K, obj.integrate; end      % ODE integration
+                obj.estimate_covariances(rep);                              % residual covariance estimation
+                obj.update_parameters(rep);                                 % gradient matching
 
-                if obj.system.P > 1
+                if obj.system.P > 1                                         % compute relative iteration steps
                     obj.convergence_steps = vecnorm((beta_old - obj.beta_fs)') ./ vecnorm(beta_old');
                 else
                     obj.convergence_steps = abs(beta_old' - obj.beta_fs') ./ abs(beta_old');
@@ -99,25 +94,15 @@ classdef FirstStage < handle
             options = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-2);
 %             options = optimoptions('fmincon', 'Display', 'off', 'OptimalityTolerance', 1e-2);
             value = Inf;
-            obj.init_hess = zeros(length(obj.settings.initial));            % multistart on first run
-            for start = 1:obj.settings.nstart
+            for start = 1:obj.settings.nstart                               % multistart on first run
                 logb0 = rand(1, obj.system.P) .* (log(obj.settings.ub) - log(obj.settings.lb)) + log(obj.settings.lb);
-                [opt_new, value_new, ~, ~, ~, ~, ...
-                 hess] = fmincon(@(logb0) obj.squares_sum(exp(logb0)), logb0, [], [], [], [], ...
+                [opt_new, value_new] = fmincon(@(logb0) obj.squares_sum(exp(logb0)), logb0, [], [], [], [], ...
                                                log(obj.settings.lb), log(obj.settings.ub), [], options);
-                if value_new < value, value = value_new; opt = opt_new; obj.init_hess = hess; end
+                if value_new < value, value = value_new; opt = opt_new; end
             end
             disp("Initial beta:")
             disp(exp(opt))
-            bfs = repmat(exp(opt), obj.N, 1); % .* exp(.1 * randn(obj.N, length(opt)))
-            obj.beta_fs_init = bfs;
-            obj.perturb();
-        end
-
-
-        function perturb(obj)
-            obj.settings.perturbation = 0;
-            obj.beta_fs = obj.beta_fs_init .* (1 + obj.settings.perturbation * randn(obj.N, obj.system.P));
+            obj.beta_fs = repmat(exp(opt), obj.N, 1);
         end
             
 
@@ -136,19 +121,24 @@ classdef FirstStage < handle
         end
             
         
-        function update_parameters(obj)                                 % Update (cell-specific) parameter estimates
-            for i = obj.not_converged
-                design = obj.system.g(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));  % model slopes from splines + integrations
+        function update_parameters(obj, rep)                        % Update (cell-specific) parameter estimates
+            for i = obj.not_converged                                       % model slopes from splines + integrations
+                design = obj.system.g(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
                 const = obj.system.const(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
                 response = obj.dsmoothed_fitted(2:end-1, :, i) - const;     % spline + integration slopes
 
                 nonzero_ind = reshape((2:obj.T-1)' + obj.T*(0:obj.system.K-1), 1, []);
-                variances = obj.variances_fs(nonzero_ind, nonzero_ind, i);
+                variances = obj.V(nonzero_ind, nonzero_ind, i);
                 weights = reshape(sqrt(obj.settings.weights(2:end-1, :)), [], 1);
                 variances = variances ./ weights ./ weights';
                 
-                [obj.beta_fs(i, :), obj.Hs(:, :, i)] = Optimizer.QPGLS(design, response, variances, obj.beta_fs(i, :), ...
-                                                                       obj.settings.lb, obj.settings.ub, obj.settings.prior);
+                if rep == 1 && obj.L == obj.system.K
+                    initial = [];
+                else
+                    initial = obj.beta_fs(i, :);
+                end 
+                obj.beta_fs(i, :) = Optimizer.QPGLS(design, response, variances, initial, ...
+                                                    obj.settings.lb, obj.settings.ub, obj.settings.prior);
             end
         end
         
@@ -187,12 +177,11 @@ classdef FirstStage < handle
             obj.integrate();                                                % compute fitted cell trajectories
             obj.data.beta_fs = obj.beta_fs;                                 % store results
             obj.data.fitted_fs = obj.fitted_fs;
-            obj.data.Hs = obj.Hs; 
             obj.data.dfitted_fs = obj.dfitted_fs;
             obj.data.smoothed_fitted_fs = obj.smoothed_fitted;
             obj.data.dsmoothed_fitted_fs = obj.dsmoothed_fitted;
-            obj.data.variances_fs = obj.variances_fs;
-            obj.data.variances_beta_fs = obj.variances_beta_fs;
+            obj.data.V = obj.V;
+            obj.data.varbeta = obj.varbeta;
             obj.data.convergence_steps = obj.convergence_steps;
         end
         
@@ -219,7 +208,7 @@ classdef FirstStage < handle
                 regulator = max(1e-12, max(abs(obj.data.smoothed(:, :, i)) / 1e6, [], 1));
                 regulator = reshape(repmat(regulator, obj.T, 1), 1, []);
                 
-                obj.variances_fs(:, :, i) = delta_h * var_smooth * delta_h' + diag(regulator);
+                obj.V(:, :, i) = delta_h * var_smooth * delta_h' + diag(regulator);
             end
         end
 
@@ -253,7 +242,7 @@ classdef FirstStage < handle
                 G = g_all(wtk_ind, :, i);
 
                 Vinv = zeros(obj.system.K * obj.T);
-                Vinv(wtk_ind, wtk_ind) = svdinv(obj.variances_fs(wtk_ind, wtk_ind, i));
+                Vinv(wtk_ind, wtk_ind) = svdinv(obj.V(wtk_ind, wtk_ind, i));
                 
                 Th = G' * Vinv(wtk_ind, wtk_ind) * G + obj.settings.prior.prec;
                 Thinv = svdinv(Th);
@@ -274,7 +263,7 @@ classdef FirstStage < handle
                 end
                 dbeta_dX = Thinv * reshape(Psi(:, wt_ind, :) - Pi(:, wt_ind, :), obj.system.P, []);
 
-                obj.variances_beta_fs(:, :, i) = [dbeta_dX dbeta_ddX] * var_XdX(wtk_ind2, wtk_ind2) * [dbeta_dX dbeta_ddX]';
+                obj.varbeta(:, :, i) = [dbeta_dX dbeta_ddX] * var_XdX(wtk_ind2, wtk_ind2) * [dbeta_dX dbeta_ddX]';
             end
         end
         
@@ -343,14 +332,9 @@ classdef FirstStage < handle
                     var_XOdXO = [Z_fs; dZ_fs] * var_delta * [Z_fs; dZ_fs]';
 
                     % DEFINITION OF Var beta
-%                     var_beta = 2 * svdinv(obj.init_hess) + obj.settings.perturbation^2 * eye(obj.system.P);
-                    var_beta = max(.5, obj.settings.perturbation)^2 * diag(obj.beta_fs_init(1, :).^2);
-%                     var_beta = 2 * svdinv(obj.init_hess) + obj.settings.perturbation^2 * diag(obj.beta_fs_init(1, :).^2);
-%                     var_beta = 2 * svdinv(obj.init_hess);
-%                     var_beta = eye(obj.system.P);
-%                     var_beta = cov(obj.data.beta);
+                    var_beta = .5^2 * diag(obj.beta_fs_init(1, :).^2);
 
-                    obj.variances_beta_fs(:, :, i) = var_beta;
+                    obj.varbeta(:, :, i) = var_beta;
                     var_XdXint = [dF_dbeta; ddF_dbeta] * var_beta * [dF_dbeta; ddF_dbeta]';
 
                     % DEFINTION OF Var X
@@ -358,7 +342,7 @@ classdef FirstStage < handle
                     var_XdX(O_indices + [0 end/2], O_indices + [0 end/2]) = var_XOdXO;
                     var_XdX(H_indices + [0 end/2], H_indices + [0 end/2]) = var_XdXint(H_indices + [0 end/2], ...
                                                                                        H_indices + [0 end/2]);
-                    obj.variances_XdX(wtk_ind2, wtk_ind2, i) = var_XdX(wtk_ind2, wtk_ind2);
+                    obj.varXdX(wtk_ind2, wtk_ind2, i) = var_XdX(wtk_ind2, wtk_ind2);
                 else
                     % DEFINITION OF dbeta_dXO and dbeta_ddXO
                     dX = reshape(dstates(wt_ind, :, i), [], 1);
@@ -366,11 +350,11 @@ classdef FirstStage < handle
                     G = g_all(wtk_ind, :, i);
                     
                     Vinv = zeros(obj.system.K * obj.T);
-                    Vinv(wtk_ind, wtk_ind) = svdinv(obj.variances_fs(wtk_ind, wtk_ind, i));
+                    Vinv(wtk_ind, wtk_ind) = svdinv(obj.V(wtk_ind, wtk_ind, i));
 
 %                     weights = reshape(sqrt(obj.settings.weights), [], 1);
 %                     weights = reshape(sqrt(obj.settings.weights .* obj.settings.state_weights), [], 1);
-%                     Vinv = svdinv(obj.variances_fs(:, :, i)) .* weights .* weights';
+%                     Vinv = svdinv(obj.V(:, :, i)) .* weights .* weights';
                     
 %                     Th = G' * Vinv * G;
                     Th = G' * Vinv(wtk_ind, wtk_ind) * G + obj.settings.prior.prec;
@@ -395,7 +379,7 @@ classdef FirstStage < handle
                     dbeta_dX = Thinv * reshape(Psi(:, wt_ind, :) - Pi(:, wt_ind, :), obj.system.P, []);
 %                     dbeta_dX(:, zero_wt_ind) = 0;
                     
-                    obj.variances_beta_fs(:, :, i) = [dbeta_dX dbeta_ddX] * obj.variances_XdX(wtk_ind2, wtk_ind2, i) * [dbeta_dX dbeta_ddX]';
+                    obj.varbeta(:, :, i) = [dbeta_dX dbeta_ddX] * obj.varXdX(wtk_ind2, wtk_ind2, i) * [dbeta_dX dbeta_ddX]';
                     if converged, return, end
 
                     % DEFINITION OF var_X
@@ -409,7 +393,7 @@ classdef FirstStage < handle
                     delta_XdX(O_indices,         :) = [identity_O_indices   zeros(obj.L * obj.T, obj.system.K * obj.T)];
                     delta_XdX(O_indices + end/2, :) = [zeros(obj.L * obj.T, obj.system.K * obj.T)   identity_O_indices];
                     
-                    obj.variances_XdX(wtk_ind2, wtk_ind2, i) = delta_XdX(wtk_ind2, wtk_ind2) * obj.variances_XdX(wtk_ind2, wtk_ind2, i) * delta_XdX(wtk_ind2, wtk_ind2)';
+                    obj.varXdX(wtk_ind2, wtk_ind2, i) = delta_XdX(wtk_ind2, wtk_ind2) * obj.varXdX(wtk_ind2, wtk_ind2, i) * delta_XdX(wtk_ind2, wtk_ind2)';
                 end
                 
                 % VARIANCE OF X, dX, AND dX - G(X)beta - H(X)
@@ -419,11 +403,11 @@ classdef FirstStage < handle
                 end
                 delta_h = [-dRHS eye(obj.system.K * obj.T)];
                 
-                V = delta_h(wtk_ind, wtk_ind2) * obj.variances_XdX(wtk_ind2, wtk_ind2, i) * delta_h(wtk_ind, wtk_ind2)';
+                V_unregulated = delta_h(wtk_ind, wtk_ind2) * obj.varXdX(wtk_ind2, wtk_ind2, i) * delta_h(wtk_ind, wtk_ind2)';
                 
                 regulator = max(1e-12, max(abs(obj.smoothed_fitted(:, :, i)) / 1e6, [], 1));
                 regulator = reshape(repmat(regulator, obj.T-2, 1), 1, []);
-                obj.variances_fs(wtk_ind, wtk_ind, i) = V + diag(regulator);
+                obj.V(wtk_ind, wtk_ind, i) = V_unregulated + diag(regulator);
             end
         end
     end

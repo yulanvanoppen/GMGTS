@@ -1,5 +1,5 @@
 classdef Estimator < handle
-    properties (Access = public)
+    properties (SetAccess = private)
         data                                                                % observed data struct
         system                                                              % ODE system object
         
