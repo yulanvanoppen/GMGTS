@@ -4,6 +4,7 @@ classdef Smoother < handle
         
         T                                                                   % number of time points
         T_fs                                                                % number of optimized time points
+        T_fine
         L                                                                   % system dimension
         N                                                                   % number of cells
         
@@ -14,52 +15,61 @@ classdef Smoother < handle
         data                                                                % general data and output container
         system
         settings
+
+        scaled
+        scaled_fs
+        scaled_fine
         
         delta
+
         B                                                                   % B-spline basis evaluated at t
         dB                                                                  % corresponding first derivative
         B_fine
         dB_fine
+
+        sigma
+        tau
+
         smoothed                                                            % smoothed data
         dsmoothed                                                           % smoothed derivative
         variances_sm
         variances_fs
-        sigma
-        tau
     end
     
     methods
         function obj = Smoother(data, system, settings)                 % Constructor
-            obj.data = data;                                                % store experiment data
-            obj.system = system;
+            obj.data = data;                                                % store data, ODE system, and hyperparameters
+            obj.system = system;                                            
             obj.settings = settings;
             [obj.T, obj.L, obj.N] = size(obj.data.traces);                  % extract trajectory dimensions
+
+            obj.scaled = (obj.data.t - obj.data.t(1)) / range(obj.data.t);  % scaled data and optimization time grids
+            obj.scaled_fs = (obj.settings.grid - obj.data.t(1)) / range(obj.data.t);
+            obj.scaled_fine = linspace(0, 1, 81);                           % equivalent for plotting
+
+            obj.T_fs = length(obj.scaled_fs);
+            obj.T_fine = length(obj.scaled_fine);
             
             if settings.autoknots, obj.place_knots(); end
             
-            obj.bsplines = cell(1, obj.L);
+            obj.bsplines = cell(1, obj.L);                                  % initialize splines and coefficients
             obj.delta = cell(1, obj.L);
             obj.update_knots(obj.settings.knots);
             
-            obj.variances_sm = zeros(obj.T, obj.L, obj.N);
-            obj.variances_fs = zeros(length(settings.grid), obj.L, obj.N);  % measurement error variances
-            obj.sigma = zeros(1, obj.L);
+            obj.sigma = zeros(1, obj.L);                                    % initialize measurement error variances
             obj.tau = zeros(1, obj.L);
+            obj.variances_sm = zeros(obj.T, obj.L, obj.N);
+            obj.variances_fs = zeros(length(settings.grid), obj.L, obj.N);
         end
 
         
         function update_knots(obj, knots, states)
             if nargin < 3, states = 1:obj.L; end
-            for k = states
-                obj.settings.knots{k} = knots{k};                           % reset bases and coefficients
+            for k = states                                                  % copy knots, reset bases and coefficients
+                obj.settings.knots{k} = knots{k};                           
                 obj.bsplines{k} = BSpline(obj.settings.order, obj.settings.knots{k});
                 obj.delta{k} = zeros(obj.bsplines{k}.card, obj.N);
             end
-            
-            grid = (obj.data.t - obj.data.t(1)) / range(obj.data.t);        % scaled time grid
-            grid_fine = linspace(0, 1, 81);                                 % scaled optimized time grid
-            grid_fs = (obj.settings.grid - obj.data.t(1)) / range(obj.data.t);
-            obj.T_fs = length(grid_fs);
             
             [obj.B, obj.dB, obj.B_fine, obj.dB_fine, ...
                     obj.data.basis_fs, obj.data.dbasis_fs] = deal(cell(1, obj.L));
@@ -67,10 +77,10 @@ classdef Smoother < handle
             for k = 1:obj.L
                 obj.B{k} = obj.bsplines{k}.basis(grid);                     % B-spline basis evaluated at t
                 obj.dB{k} = obj.bsplines{k}.basis_diff(grid);               % corresponding first derivative
-                obj.data.basis_fs{k} = obj.bsplines{k}.basis(grid_fs);      % save for later use
-                obj.data.dbasis_fs{k} = obj.bsplines{k}.basis_diff(grid_fs); 
-                obj.B_fine{k} = obj.bsplines{k}.basis(grid_fine);           % save for smooth plotting
-                obj.dB_fine{k} = obj.bsplines{k}.basis_diff(grid_fine);
+                obj.data.basis_fs{k} = obj.bsplines{k}.basis(obj.scaled_fs);% save for later use
+                obj.data.dbasis_fs{k} = obj.bsplines{k}.basis_diff(obj.scaled_fs); 
+                obj.B_fine{k} = obj.bsplines{k}.basis(obj.scaled_fine);     % save for smooth plotting
+                obj.dB_fine{k} = obj.bsplines{k}.basis_diff(obj.scaled_fine);
             end
 
             obj.data.basis = obj.B;                                         % save for later use
@@ -168,9 +178,6 @@ classdef Smoother < handle
                     obj.data.dsmoothed_fine(:, k, i) = obj.dB_fine{k}' * obj.delta{k}(:, i) / range(obj.data.t);
                 end
             end
-%             a = linspace(1, 0, size(obj.data.smoothed, 1))';
-%             obj.data.smoothed = a .* obj.data.smoothed + (1-a) .* obj.data.original(:, 2, :);
-%             obj.data.dsmoothed = a .* obj.data.dsmoothed + (1-a) .* obj.data.doriginal(:, 2, :);
             
             obj.data.smoothed = max(obj.data.smoothed, 1e-12);
         end
