@@ -2,7 +2,7 @@ classdef FirstStage < handle
     properties (SetAccess = private)
         data                                                                % data aggregate struct
         system                                                              % nested object controlling the ODE system
-        settings                                                            % weights and loop controls
+        settings                                                            % hyperparameters and user input
         
         T                                                                   % number of time points
         L                                                                   % number of observed states
@@ -16,11 +16,12 @@ classdef FirstStage < handle
         convergence_steps                                                   % relative iteration steps
         not_converged                                                       % indices of cells that have not yet converged
         
-        smoothed_fitted                                                     % combination of predictions (hidden states)
-        dsmoothed_fitted                                                    % and smoothing (observed states) + derivatives
-        fitted_fs                                                           % predictions + derivatives
+        smoothed_fitted                                                     % combination of predicted (hidden)
+        dsmoothed_fitted                                                    % and smoothed (observed) states/gradients)
+        fitted_fs                                                           % predicted states and gradients
         dfitted_fs
     end
+    
     
     methods
         function obj = FirstStage(data, system, settings)               % Constructor
@@ -183,6 +184,7 @@ classdef FirstStage < handle
             obj.data.V = obj.V;
             obj.data.varbeta = obj.varbeta;
             obj.data.convergence_steps = obj.convergence_steps;
+            obj.data.converged = setdiff(1:obj.N, obj.not_converged);
         end
         
         

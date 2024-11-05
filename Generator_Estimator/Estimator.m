@@ -35,6 +35,7 @@ classdef Estimator < handle
         results_GTS                                                         % collect GTS results
     end
     
+    
     methods
         %% Constructor -----------------------------------------------------
         function obj = Estimator(data, system, varargin)
