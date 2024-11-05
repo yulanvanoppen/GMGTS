@@ -39,7 +39,7 @@ classdef FirstStage < handle
             
             if obj.L < system.K
                 obj.initialize()                                            % numerically optimize
-                obj.integrate(settings.nrep == 0)                           % save solution if 'converged'
+                obj.integrate(settings.niter == 0)                           % save solution if 'converged'
             end
         end
         
@@ -54,65 +54,62 @@ classdef FirstStage < handle
                 disp('Partial observation GMGTS: Extended iterative scheme')
             end
 
-            if obj.settings.nrep == 0, obj.estimate_covariances(1), end
+            if obj.settings.niter == 0, obj.estimate_covariances(1), end
             
-            for rep = 1:obj.settings.nrep
+            for iter = 1:obj.settings.niter
                 beta_old = obj.beta_fs;
 
-                if rep > 1 && obj.L < obj.system.K, obj.integrate; end      % ODE integration
-                obj.estimate_covariances(rep);                              % residual covariance estimation
-                obj.update_parameters(rep);                                 % gradient matching
+                if iter > 1 && obj.L < obj.system.K, obj.integrate; end     % ODE integration
+                obj.estimate_covariances(iter);                             % residual covariance estimation
+                obj.update_parameters(iter);                                % gradient matching
 
                 if obj.system.P > 1                                         % compute relative iteration steps
                     obj.convergence_steps = vecnorm((beta_old - obj.beta_fs)') ./ vecnorm(beta_old');
                 else
                     obj.convergence_steps = abs(beta_old' - obj.beta_fs') ./ abs(beta_old');
-                end
+                end                                                         % cells that have not converged 
                 obj.not_converged = find(obj.convergence_steps >= obj.settings.tol);
                 
-                fprintf('%3d (%.1e, %.1e, %.1e)\n', rep, ...
+                fprintf('%3d (%.1e, %.1e, %.1e)\n', iter, ...               % print iteration step quantiles .5, .9, 1.0
                         median(obj.convergence_steps), quantile(obj.convergence_steps, .9), max(obj.convergence_steps));
                 
-                if quantile(obj.convergence_steps, .9) < obj.settings.tol || rep == obj.settings.nrep
-                    if obj.L < obj.system.K
-                        obj.estimate_covariances(rep, true);
+                                                                            % break when 90% of cells have converged
+                if quantile(obj.convergence_steps, .9) < obj.settings.tol || iter == obj.settings.niter
+                    if obj.L < obj.system.K                                 % estimate final uncertainty of beta
+                        obj.estimate_covariances(iter, true);
                     else
-                        obj.covariances_full_beta(rep);
+                        obj.covariances_full_beta(iter);
                     end
-                    obj.integrate(true);
                     break
                 end
             end
             
             obj.beta_fs(obj.beta_fs < 1e-15) = 0;                           % polish final estimates
             obj.extract_estimates();                                        % save estimates and fitted trajectories
-            output = obj.data;                                              % return expanded data container
+            output = obj.data;                                              % return data appended with FS results
         end
         
         
-        function initialize(obj)
+        function initialize(obj)                                        % Initial numerical optimization on population average
             options = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-2);
-%             options = optimoptions('fmincon', 'Display', 'off', 'OptimalityTolerance', 1e-2);
             value = Inf;
-            for start = 1:obj.settings.nstart                               % multistart on first run
+            for start = 1:obj.settings.nstart                               % uniformly sample in log parameter space
                 logb0 = rand(1, obj.system.P) .* (log(obj.settings.ub) - log(obj.settings.lb)) + log(obj.settings.lb);
                 [opt_new, value_new] = fmincon(@(logb0) obj.squares_sum(exp(logb0)), logb0, [], [], [], [], ...
                                                log(obj.settings.lb), log(obj.settings.ub), [], options);
                 if value_new < value, value = value_new; opt = opt_new; end
             end
-            disp("Initial beta:")
-            disp(exp(opt))
-            obj.beta_fs = repmat(exp(opt), obj.N, 1);
+            obj.beta_fs = repmat(exp(opt), obj.N, 1);                       % copy to each cell
         end
             
 
-        function ss = squares_sum(obj, b)              % Weighted um of squared differences
+        function ss = squares_sum(obj, b)                               % Weighted um of squared differences
             ss = Inf;
-            try
+            try                                                             % compute fitted trajectories
                 solution = obj.system.integrate(b, obj.data, obj.data.t_data);
-                solution = solution(:, obj.data.observed, :);
+                solution = solution(:, obj.data.observed, :);               % sum of squares on observed states
                 ss = sum((solution - obj.data.traces).^2 ./ mean(obj.data.traces, [1 3]).^2, 'all');
-
+                                                                            % add prior term (if any)
                 ss = ss + (b' - obj.settings.prior.mean)' * (obj.settings.prior.prec * obj.settings.prior.mult) ...
                                                           * (b' - obj.settings.prior.mean);
             catch ME
@@ -121,22 +118,23 @@ classdef FirstStage < handle
         end
             
         
-        function update_parameters(obj, rep)                        % Update (cell-specific) parameter estimates
-            for i = obj.not_converged                                       % model slopes from splines + integrations
+        function update_parameters(obj, iter)                           % Update (cell-specific) parameter estimates
+            for i = obj.not_converged                                       % model slopes from splines and integrations
                 design = obj.system.g(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
                 const = obj.system.const(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
-                response = obj.dsmoothed_fitted(2:end-1, :, i) - const;     % spline + integration slopes
-
+                response = obj.dsmoothed_fitted(2:end-1, :, i) - const;     % spline and integration slopes
+    
+                                                                            % disregard interval ends
                 nonzero_ind = reshape((2:obj.T-1)' + obj.T*(0:obj.system.K-1), 1, []);
                 variances = obj.V(nonzero_ind, nonzero_ind, i);
                 weights = reshape(sqrt(obj.settings.weights(2:end-1, :)), [], 1);
                 variances = variances ./ weights ./ weights';
                 
-                if rep == 1 && obj.L == obj.system.K
-                    initial = [];
+                if iter == 1 && obj.L == obj.system.K                       % omit starting point for full observation
+                    initial = [];                                           % on the first iteration
                 else
                     initial = obj.beta_fs(i, :);
-                end 
+                end                                                         % constrained GLS using quadratic programming
                 obj.beta_fs(i, :) = Optimizer.QPGLS(design, response, variances, initial, ...
                                                     obj.settings.lb, obj.settings.ub, obj.settings.prior);
             end
@@ -147,9 +145,9 @@ classdef FirstStage < handle
             if nargin < 3, converged = false; end 
             
             if obj.L == obj.system.K
-                obj.covariances_full;
+                obj.covariances_full;                                       % full observation
             else
-                obj.covariances_partial(rep, converged);
+                obj.covariances_partial(rep, converged);                    % partial observation
             end
         end
         
@@ -157,15 +155,16 @@ classdef FirstStage < handle
         function integrate(obj, converged)                              % Hidden states integration
             if nargin == 1, converged = false; end
             
-            obj.fitted_fs = obj.system.integrate(obj.beta_fs, obj.data);    % integrate system
-            obj.fitted_fs = max(1e-12, obj.fitted_fs);
-            obj.dfitted_fs = obj.system.rhs(obj.fitted_fs, obj.data.t, obj.beta_fs);    % compute corresponding rhs
+            obj.fitted_fs = obj.system.integrate(obj.beta_fs, obj.data);    % integrate system and compute rhs
+            obj.fitted_fs = max(1e-12, obj.fitted_fs);                      % force positive
+            obj.dfitted_fs = obj.system.rhs(obj.fitted_fs, obj.data.t, obj.beta_fs);
             unobserved = ~ismember(1:obj.system.K, obj.data.observed);      % replace unobserved states by ODE integrations
             
+                                                                            % substitute integrated hidden states and gradients
             obj.smoothed_fitted(:, unobserved, :) = obj.fitted_fs(:, unobserved, :); 
             obj.dsmoothed_fitted(:, unobserved, :) = obj.dfitted_fs(:, unobserved, :);
             
-            if converged
+            if converged                                                    % store smooth versions upon convergence
                 obj.data.t_fine = linspace(obj.data.t(1), obj.data.t(end), 201);
                 obj.data.fitted_fs_fine = max(1e-12, obj.system.integrate(obj.beta_fs, obj.data, obj.data.t_fine));
                 obj.data.dfitted_fs_fine = obj.system.rhs(obj.data.fitted_fs_fine, obj.data.t_fine, obj.beta_fs);
@@ -174,7 +173,7 @@ classdef FirstStage < handle
         
         
         function extract_estimates(obj)                                 % Extract results 
-            obj.integrate();                                                % compute fitted cell trajectories
+            obj.integrate(true);                                            % compute fitted cell trajectories
             obj.data.beta_fs = obj.beta_fs;                                 % store results
             obj.data.fitted_fs = obj.fitted_fs;
             obj.data.dfitted_fs = obj.dfitted_fs;
@@ -187,83 +186,81 @@ classdef FirstStage < handle
         
         
         function covariances_full(obj)
-            Z = blkdiag(obj.data.basis{:})';
-            Z_fs = blkdiag(obj.data.basis_fs{:})';
-            dZ_fs = blkdiag(obj.data.dbasis_fs{:})' / range(obj.data.t);
+            Z = blkdiag(obj.data.basis{:})';                                % B-spline basis for all states
+            Z_fs = blkdiag(obj.data.basis_fs{:})';                          % equivalent with first stage time point grid
+            dZ_fs = blkdiag(obj.data.dbasis_fs{:})' / range(obj.data.t);    % corresponding differentiated basis
             
+                                                                            % RHS Jacobian for each cell from smoothed measurements
             dRHS_all = obj.system.df(obj.data.smoothed, obj.data.t, obj.beta_fs);
             
-            for i = obj.not_converged
-                S = diag(reshape(obj.data.variances_sm(:, :, i) + 1e-12, 1, []));
-                var_delta = svdinv(Z' * (S \ Z));
-                var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];
+            for i = obj.not_converged                                       % estimated measurement error variances
+                S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
+                var_delta = svdinv(Z' * (S \ Z));                           % spline coefficient uncertainty
+                var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
                 
                 dF = zeros(obj.system.K * obj.T);
-                for j = 1:obj.T
+                for j = 1:obj.T                                             % restructure RHS Jacobian
                     dF(j + obj.T*(0:obj.system.K-1), j + obj.T*(0:obj.system.K-1)) = dRHS_all(j + obj.T*(0:obj.system.K-1), :, i);
                 end
                 
-                delta_h = [-dF eye(obj.L*obj.T)];
+                function_gradient = [-dF eye(obj.L*obj.T)];                 % gradient for delta method
                 
                 regulator = max(1e-12, max(abs(obj.data.smoothed(:, :, i)) / 1e6, [], 1));
                 regulator = reshape(repmat(regulator, obj.T, 1), 1, []);
-                
-                obj.V(:, :, i) = delta_h * var_smooth * delta_h' + diag(regulator);
+                                                                            % regulated delta method approximation
+                obj.V(:, :, i) = function_gradient * var_smooth * function_gradient' + diag(regulator);
             end
         end
 
 
         function covariances_full_beta(obj, rep)
-            wt_ind = 2:obj.T-1;
-            wtk_ind = reshape(wt_ind' + obj.T*(0:obj.system.K-1), 1, []);
-            wtk_ind2 = reshape(wtk_ind' + [0 obj.system.K*obj.T], 1, []);
-            
-            states = obj.smoothed_fitted;
-            dstates = obj.dsmoothed_fitted;
+            indices_t = 2:obj.T-1;                                          % time indices without interval ends
+            indices_tk = reshape(indices_t' + obj.T*(0:obj.system.K-1), 1, []); % across states
+            indices_2tk = reshape(indices_tk' + [0 obj.system.K*obj.T], 1, []); % across state and gradient components
                 
-            Z = blkdiag(obj.data.basis{:})';
-            Z_fs = blkdiag(obj.data.basis_fs{:})';
-            dZ_fs = blkdiag(obj.data.dbasis_fs{:})' / range(obj.data.t);
+            Z = blkdiag(obj.data.basis{:})';                                % B-spline basis for all states
+            Z_fs = blkdiag(obj.data.basis_fs{:})';                          % equivalent with first stage time point grid
+            dZ_fs = blkdiag(obj.data.dbasis_fs{:})' / range(obj.data.t);    % corresponding differentiated basis
 
-            if rep > 1
-                g_all = obj.system.g(states, obj.data.t);
-                dg_all = obj.system.dg(states, obj.data.t);
-                const_all = obj.system.const(states, obj.data.t);
-                dconst_all = obj.system.dconst(states, obj.data.t);
+            if rep > 1                                                      % compute g(.), h(.), and their Jacobians for each cell
+                g_all = obj.system.g(obj.data.smoothed, obj.data.t);
+                dg_all = obj.system.dg(obj.data.smoothed, obj.data.t);
+                const_all = obj.system.const(obj.data.smoothed, obj.data.t);
+                dconst_all = obj.system.dconst(obj.data.smoothed, obj.data.t);
             end
             
-            for i = 1:obj.N
-                S = diag(reshape(obj.data.variances_sm(:, :, i) + 1e-12, 1, []));
-                var_delta = svdinv(Z' * (S \ Z));
-                var_XdX = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];
+            for i = 1:obj.N                                                 % estimated measurement error variances
+                S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
+                var_delta = svdinv(Z' * (S \ Z));                           % spline coefficient uncertainty
+                var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
                 
-                dX = reshape(dstates(wt_ind, :, i), [], 1);
-                const = reshape(const_all(wt_ind, :, i), [], 1);
-                G = g_all(wtk_ind, :, i);
+                dX = reshape(obj.data.dsmoothed(indices_t, :, i), [], 1);
+                const = reshape(const_all(indices_t, :, i), [], 1);
+                G = g_all(indices_tk, :, i);
 
                 Vinv = zeros(obj.system.K * obj.T);
-                Vinv(wtk_ind, wtk_ind) = svdinv(obj.V(wtk_ind, wtk_ind, i));
+                Vinv(indices_tk, indices_tk) = svdinv(obj.V(indices_tk, indices_tk, i));
                 
-                Th = G' * Vinv(wtk_ind, wtk_ind) * G + obj.settings.prior.prec;
+                Th = G' * Vinv(indices_tk, indices_tk) * G + obj.settings.prior.prec;
                 Thinv = svdinv(Th);
-                dbeta_ddX = Thinv * G' * Vinv(wtk_ind, wtk_ind);
+                dbeta_ddX = Thinv * G' * Vinv(indices_tk, indices_tk);
                 
-                Xi = G' * Vinv(wtk_ind, wtk_ind) * (dX - const) + obj.settings.prior.prec * obj.settings.prior.mean;
+                Xi = G' * Vinv(indices_tk, indices_tk) * (dX - const) + obj.settings.prior.prec * obj.settings.prior.mean;
                 Thinv_Xi = Thinv * Xi;
                 Pi = zeros(obj.system.P, obj.T, obj.system.K);
                 Psi = zeros(obj.system.P, obj.T, obj.system.K);
                 for k = 1:obj.system.K
                     for j = 2:obj.T-1
                         dg_dxk = dg_all(:, :, j, k, i);
-                        Vinv_j = Vinv(j + obj.T*(0:obj.system.K-1), wtk_ind);
+                        Vinv_j = Vinv(j + obj.T*(0:obj.system.K-1), indices_tk);
 
                         Pi(:, j, k) = (dg_dxk' * Vinv_j * G + G' * Vinv_j' * dg_dxk) * Thinv_Xi;
                         Psi(:, j, k) = dg_dxk' * Vinv_j * (dX-const) - G' * Vinv_j' * dconst_all(j + obj.T*(0:obj.system.K-1), k, i);
                     end
                 end
-                dbeta_dX = Thinv * reshape(Psi(:, wt_ind, :) - Pi(:, wt_ind, :), obj.system.P, []);
+                dbeta_dX = Thinv * reshape(Psi(:, indices_t, :) - Pi(:, indices_t, :), obj.system.P, []);
 
-                obj.varbeta(:, :, i) = [dbeta_dX dbeta_ddX] * var_XdX(wtk_ind2, wtk_ind2) * [dbeta_dX dbeta_ddX]';
+                obj.varbeta(:, :, i) = [dbeta_dX dbeta_ddX] * var_smooth(indices_2tk, indices_2tk) * [dbeta_dX dbeta_ddX]';
             end
         end
         
@@ -281,7 +278,6 @@ classdef FirstStage < handle
             wt_ind = 2:obj.T-1;
             wtk_ind = reshape(wt_ind' + obj.T*(0:obj.system.K-1), 1, []);
             wtk_ind2 = reshape(wtk_ind' + [0 obj.system.K*obj.T], 1, []);
-%             zero_wt_ind = reshape(([1 obj.T])' + obj.T*(0:obj.system.K-1), 1, []);
 
             states = obj.smoothed_fitted;
             dstates = obj.dsmoothed_fitted;
@@ -326,7 +322,6 @@ classdef FirstStage < handle
 
                 if rep == 1
                     % DEFINITION OF Var XO
-%                     S = diag(reshape(obj.data.variances_sm(:, :, i) + 1e-12, 1, []));
                     S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
                     var_delta = svdinv(Z' * (S \ Z));
                     var_XOdXO = [Z_fs; dZ_fs] * var_delta * [Z_fs; dZ_fs]';
@@ -351,18 +346,11 @@ classdef FirstStage < handle
                     
                     Vinv = zeros(obj.system.K * obj.T);
                     Vinv(wtk_ind, wtk_ind) = svdinv(obj.V(wtk_ind, wtk_ind, i));
-
-%                     weights = reshape(sqrt(obj.settings.weights), [], 1);
-%                     weights = reshape(sqrt(obj.settings.weights .* obj.settings.state_weights), [], 1);
-%                     Vinv = svdinv(obj.V(:, :, i)) .* weights .* weights';
                     
-%                     Th = G' * Vinv * G;
                     Th = G' * Vinv(wtk_ind, wtk_ind) * G + obj.settings.prior.prec;
                     Thinv = svdinv(Th);
                     dbeta_ddX = Thinv * G' * Vinv(wtk_ind, wtk_ind);
-%                     dbeta_ddX(:, zero_wt_ind) = 0;
 
-%                     Xi = G' * Vinv * (dX - const);
                     Xi = G' * Vinv(wtk_ind, wtk_ind) * (dX - const) + obj.settings.prior.prec * obj.settings.prior.mean;
                     Thinv_Xi = Thinv * Xi;
                     Pi = zeros(obj.system.P, obj.T, obj.system.K);
@@ -377,7 +365,6 @@ classdef FirstStage < handle
                         end
                     end
                     dbeta_dX = Thinv * reshape(Psi(:, wt_ind, :) - Pi(:, wt_ind, :), obj.system.P, []);
-%                     dbeta_dX(:, zero_wt_ind) = 0;
                     
                     obj.varbeta(:, :, i) = [dbeta_dX dbeta_ddX] * obj.varXdX(wtk_ind2, wtk_ind2, i) * [dbeta_dX dbeta_ddX]';
                     if converged, return, end
