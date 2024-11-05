@@ -45,16 +45,17 @@ classdef FirstStage < handle
         
         
         function output = optimize(obj)                                 % Main optimization function
+                                                                            % substitute smoothed measurements
             obj.smoothed_fitted(:, obj.data.observed, :) = obj.data.smoothed;
             obj.dsmoothed_fitted(:, obj.data.observed, :) = obj.data.dsmoothed;
             
-            if obj.L == obj.system.K                                        % full observation
+            if obj.L == obj.system.K
                 disp('Full observation GMGTS: Gradient matching only')
             else
                 disp('Partial observation GMGTS: Extended iterative scheme')
             end
 
-            if obj.settings.niter == 0, obj.estimate_covariances(1), end
+            if obj.settings.niter == 0, obj.estimate_covariances(1), end    % assume (premature) convergence
             
             for iter = 1:obj.settings.niter
                 beta_old = obj.beta_fs;
@@ -185,35 +186,35 @@ classdef FirstStage < handle
         end
         
         
-        function covariances_full(obj)
+        function covariances_full(obj)                                  % Residual covariances for full observation
             Z = blkdiag(obj.data.basis{:})';                                % B-spline basis for all states
             Z_fs = blkdiag(obj.data.basis_fs{:})';                          % equivalent with first stage time point grid
             dZ_fs = blkdiag(obj.data.dbasis_fs{:})' / range(obj.data.t);    % corresponding differentiated basis
             
                                                                             % RHS Jacobian for each cell from smoothed measurements
-            dRHS_all = obj.system.df(obj.data.smoothed, obj.data.t, obj.beta_fs);
+            df_dX_all = obj.system.df(obj.data.smoothed, obj.data.t, obj.beta_fs);
             
             for i = obj.not_converged                                       % estimated measurement error variances
                 S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
                 var_delta = svdinv(Z' * (S \ Z));                           % spline coefficient uncertainty
                 var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
                 
-                dF = zeros(obj.system.K * obj.T);
+                df = zeros(obj.system.K * obj.T);                           % residual covariance approximation
                 for j = 1:obj.T                                             % restructure RHS Jacobian
-                    dF(j + obj.T*(0:obj.system.K-1), j + obj.T*(0:obj.system.K-1)) = dRHS_all(j + obj.T*(0:obj.system.K-1), :, i);
+                    df(j + obj.T*(0:obj.system.K-1), j + obj.T*(0:obj.system.K-1)) = df_dX_all(j + obj.T*(0:obj.system.K-1), :, i);
                 end
                 
-                function_gradient = [-dF eye(obj.L*obj.T)];                 % gradient for delta method
+                residual_gradient = [-df eye(obj.L*obj.T)];                 % gradient for delta method
                 
                 regulator = max(1e-12, max(abs(obj.data.smoothed(:, :, i)) / 1e6, [], 1));
                 regulator = reshape(repmat(regulator, obj.T, 1), 1, []);
                                                                             % regulated delta method approximation
-                obj.V(:, :, i) = function_gradient * var_smooth * function_gradient' + diag(regulator);
+                obj.V(:, :, i) = residual_gradient * var_smooth * residual_gradient' + diag(regulator);
             end
         end
 
 
-        function covariances_full_beta(obj, rep)
+        function covariances_full_beta(obj, rep)                        % Parameter uncertainties for full observation
             indices_t = 2:obj.T-1;                                          % time indices without interval ends
             indices_tk = reshape(indices_t' + obj.T*(0:obj.system.K-1), 1, []); % across states
             indices_2tk = reshape(indices_tk' + [0 obj.system.K*obj.T], 1, []); % across state and gradient components
@@ -234,18 +235,20 @@ classdef FirstStage < handle
                 var_delta = svdinv(Z' * (S \ Z));                           % spline coefficient uncertainty
                 var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
                 
-                dX = reshape(obj.data.dsmoothed(indices_t, :, i), [], 1);
-                const = reshape(const_all(indices_t, :, i), [], 1);
-                G = g_all(indices_tk, :, i);
+                dX = reshape(obj.data.dsmoothed(indices_t, :, i), [], 1);   % left-hand side
+                H = reshape(const_all(indices_t, :, i), [], 1);             % constant part wrt parameters
+                G = g_all(indices_tk, :, i);                                % linear part wrt parameters
 
-                Vinv = zeros(obj.system.K * obj.T);
+                Vinv = zeros(obj.system.K * obj.T);                         % inverse residual covariance matrix estimate
                 Vinv(indices_tk, indices_tk) = svdinv(obj.V(indices_tk, indices_tk, i));
                 
+                                                                            % construct d[beta]/d[dX] and d[beta]/d[X]
+                                                                            % cf. section "S6 First-stage uncertainty estimates for fully observed systems"
                 Th = G' * Vinv(indices_tk, indices_tk) * G + obj.settings.prior.prec;
                 Thinv = svdinv(Th);
-                dbeta_ddX = Thinv * G' * Vinv(indices_tk, indices_tk);
+                dbeta_ddX = Thinv * G' * Vinv(indices_tk, indices_tk);      % partial with respect to dX
                 
-                Xi = G' * Vinv(indices_tk, indices_tk) * (dX - const) + obj.settings.prior.prec * obj.settings.prior.mean;
+                Xi = G' * Vinv(indices_tk, indices_tk) * (dX - H) + obj.settings.prior.prec * obj.settings.prior.mean;
                 Thinv_Xi = Thinv * Xi;
                 Pi = zeros(obj.system.P, obj.T, obj.system.K);
                 Psi = zeros(obj.system.P, obj.T, obj.system.K);
@@ -255,146 +258,142 @@ classdef FirstStage < handle
                         Vinv_j = Vinv(j + obj.T*(0:obj.system.K-1), indices_tk);
 
                         Pi(:, j, k) = (dg_dxk' * Vinv_j * G + G' * Vinv_j' * dg_dxk) * Thinv_Xi;
-                        Psi(:, j, k) = dg_dxk' * Vinv_j * (dX-const) - G' * Vinv_j' * dconst_all(j + obj.T*(0:obj.system.K-1), k, i);
+                        Psi(:, j, k) = dg_dxk' * Vinv_j * (dX-H) - G' * Vinv_j' * dconst_all(j + obj.T*(0:obj.system.K-1), k, i);
                     end
-                end
+                end                                                         % partial with respect to X
                 dbeta_dX = Thinv * reshape(Psi(:, indices_t, :) - Pi(:, indices_t, :), obj.system.P, []);
 
+                                                                            % delta method approximation
                 obj.varbeta(:, :, i) = [dbeta_dX dbeta_ddX] * var_smooth(indices_2tk, indices_2tk) * [dbeta_dX dbeta_ddX]';
             end
         end
         
         
-        function covariances_partial(obj, rep, converged)
-            if nargin < 3, converged = false; end
+        function covariances_partial(obj, rep, converged)               % Parameter uncertainties and residual covariances
+            if nargin < 3, converged = false; end                       % for partial observation
             if converged, cells = 1:obj.N; else, cells = obj.not_converged; end
-            
-            observed = obj.data.observed;
-            hidden = 1:obj.system.K;
-            hidden = hidden(~ismember(1:obj.system.K, observed));
-            H_indices = reshape((1:obj.T)'+(obj.T*(hidden-1)), [], 1);
-            O_indices = reshape((1:obj.T)'+(obj.T*(observed-1)), [], 1);
-            
-            wt_ind = 2:obj.T-1;
-            wtk_ind = reshape(wt_ind' + obj.T*(0:obj.system.K-1), 1, []);
-            wtk_ind2 = reshape(wtk_ind' + [0 obj.system.K*obj.T], 1, []);
 
-            states = obj.smoothed_fitted;
-            dstates = obj.dsmoothed_fitted;
+            hidden = setdiff(1:obj.system.K, obj.data.observed);            % hidden/observed state/time indices
+            ind_hid = reshape((1:obj.T)'+(obj.T*(hidden-1)), [], 1);
+            ind_obs = reshape((1:obj.T)'+(obj.T*(obj.data.observed-1)), [], 1);
             
-            Z = blkdiag(obj.data.basis{:})';
-            Z_fs = blkdiag(obj.data.basis_fs{:})';
-            dZ_fs = blkdiag(obj.data.dbasis_fs{:})' / range(obj.data.t); 
+            indices_t = 2:obj.T-1;                                          % time indices without interval ends
+            indices_tk = reshape(indices_t' + obj.T*(0:obj.system.K-1), 1, []); % across states
+            indices_2tk = reshape(indices_tk' + [0 obj.system.K*obj.T], 1, []); % across state and gradient components
+            
+            Z = blkdiag(obj.data.basis{:})';                                % B-spline basis for all states
+            Z_fs = blkdiag(obj.data.basis_fs{:})';                          % equivalent with first stage time point grid
+            dZ_fs = blkdiag(obj.data.dbasis_fs{:})' / range(obj.data.t);    % corresponding differentiated basis
 
-            if rep > 1
-                g_all = obj.system.g(states, obj.data.t);
+            if rep > 1                                                      % compute g(.), h(.), and their Jacobians for each cell
+                g_all = obj.system.g(obj.smoothed_fitted, obj.data.t);
                 dg_all = zeros(obj.system.K, obj.system.P, obj.T, obj.system.K, obj.N);
-                dg_all(:, :, :, :, cells) = obj.system.dg(states(:, :, cells), obj.data.t);
-                const_all = obj.system.const(states, obj.data.t);
-                dconst_all = obj.system.dconst(states, obj.data.t);
+                dg_all(:, :, :, :, cells) = obj.system.dg(obj.smoothed_fitted(:, :, cells), obj.data.t);
+                const_all = obj.system.const(obj.smoothed_fitted, obj.data.t);
+                dconst_all = obj.system.dconst(obj.smoothed_fitted, obj.data.t);
             end
-            
-            dRHS_all = obj.system.df(states, obj.data.t, obj.beta_fs);
+                                                                            % RHS Jacobian for each cell from smoothed measurements
+            df_dX_all = obj.system.df(obj.smoothed_fitted, obj.data.t, obj.beta_fs);
 
-            beta_transf = permute(obj.beta_fs, [3 2 1]);
-            epsilon = max(1e-8, beta_transf * .001);
-            beta_pm_eps = beta_transf + epsilon .* kron([1; -1], eye(obj.system.P));
+            beta_permuted = permute(obj.beta_fs, [3 2 1]);                  % vectorized finite difference approximations
+            epsilon = max(1e-8, beta_permuted * .001);                      % of solution and RHS parameter sensitivities
+            beta_pm_eps = beta_permuted + epsilon .* kron([1; -1], eye(obj.system.P));
+
             traces_pm_eps = zeros(obj.T, obj.system.K, obj.system.P, 2, obj.N);
-            
             for i = cells
-                for p = 1:obj.system.P
+                for p = 1:obj.system.P                                      % numerically integrate at parameter component pm eps
                     traces_pm_eps(:, :, p, 1, i) = obj.system.integrate(beta_pm_eps(p, :, i), obj.data, obj.data.t, 1e-4);
                     traces_pm_eps(:, :, p, 2, i) = obj.system.integrate(beta_pm_eps(p+end/2, :, i), obj.data, obj.data.t, 1e-4);
                 end
             end
-            
+                                                                            % restructure for rhs evaluations
             beta_pm_eps = reshape(permute(beta_pm_eps, [2 1 3]), obj.system.P, [])';
-            dtraces_pm_eps = reshape(obj.system.rhs(reshape(traces_pm_eps, obj.T, obj.system.K, []), obj.data.t, ...
+            gradients_pm_eps = reshape(obj.system.rhs(reshape(traces_pm_eps, obj.T, obj.system.K, []), obj.data.t, ...
                                                     beta_pm_eps), obj.T, obj.system.K, obj.system.P, 2, []);
-            eps_denom = reshape(2*epsilon, 1, 1, obj.system.P, 1, obj.N).^-1;
-            gradient_all = permute((traces_pm_eps(:, :, :, 1, :) - traces_pm_eps(:, :, :, 2, :)) .* eps_denom, [1:3 5 4]);
-            dgradient_all = permute((dtraces_pm_eps(:, :, :, 1, :) - dtraces_pm_eps(:, :, :, 2, :)) .* eps_denom, [1:3 5 4]);
+
+            eps_denom = 1./reshape(2*epsilon, 1, 1, obj.system.P, 1, obj.N);% finite difference approximations
+            dF_dbeta_all = permute((traces_pm_eps(:, :, :, 1, :) - traces_pm_eps(:, :, :, 2, :)) .* eps_denom, [1:3 5 4]);
+            df_dbeta_all = permute((gradients_pm_eps(:, :, :, 1, :) - gradients_pm_eps(:, :, :, 2, :)) .* eps_denom, [1:3 5 4]);
             
             for i = cells
-                % DEFINITION OF dF_dbeta & ddF_dbeta
-                dF_dbeta = reshape(gradient_all(:, :, :, i), [], obj.system.P);
-                ddF_dbeta = reshape(dgradient_all(:, :, :, i), [], obj.system.P);
+                dF_dbeta = reshape(dF_dbeta_all(:, :, :, i), [], obj.system.P);
+                df_dbeta = reshape(df_dbeta_all(:, :, :, i), [], obj.system.P);
 
-                if rep == 1
-                    % DEFINITION OF Var XO
+                if rep == 1                                                 % smoothing covariance
                     S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
                     var_delta = svdinv(Z' * (S \ Z));
                     var_XOdXO = [Z_fs; dZ_fs] * var_delta * [Z_fs; dZ_fs]';
 
-                    % DEFINITION OF Var beta
-                    var_beta = .5^2 * diag(obj.beta_fs_init(1, :).^2);
+                    obj.varbeta(:, :, i) = .5^2 * diag(obj.beta_fs(i, :).^2);   % initial (large) parameter uncertainty
+                    var_XdXint = [dF_dbeta; df_dbeta] * obj.varbeta(:, :, i) * [dF_dbeta; df_dbeta]';
 
-                    obj.varbeta(:, :, i) = var_beta;
-                    var_XdXint = [dF_dbeta; ddF_dbeta] * var_beta * [dF_dbeta; ddF_dbeta]';
+                    var_XdX = zeros(2 * obj.system.K * obj.T);              % full state/gradient covariance
+                    var_XdX(ind_obs + [0 end/2], ind_obs + [0 end/2]) = var_XOdXO;
+                    var_XdX(ind_hid + [0 end/2], ind_hid + [0 end/2]) = var_XdXint(ind_hid + [0 end/2], ...
+                                                                                       ind_hid + [0 end/2]);
+                    obj.varXdX(indices_2tk, indices_2tk, i) = var_XdX(indices_2tk, indices_2tk);
 
-                    % DEFINTION OF Var X
-                    var_XdX = zeros(2 * obj.system.K * obj.T);
-                    var_XdX(O_indices + [0 end/2], O_indices + [0 end/2]) = var_XOdXO;
-                    var_XdX(H_indices + [0 end/2], H_indices + [0 end/2]) = var_XdXint(H_indices + [0 end/2], ...
-                                                                                       H_indices + [0 end/2]);
-                    obj.varXdX(wtk_ind2, wtk_ind2, i) = var_XdX(wtk_ind2, wtk_ind2);
                 else
-                    % DEFINITION OF dbeta_dXO and dbeta_ddXO
-                    dX = reshape(dstates(wt_ind, :, i), [], 1);
-                    const = reshape(const_all(wt_ind, :, i), [], 1);
-                    G = g_all(wtk_ind, :, i);
+                                                                            % left-hand side
+                    dX = reshape(obj.dsmoothed_fitted(indices_t, :, i), [], 1);
+                    H = reshape(const_all(indices_t, :, i), [], 1);         % constant part wrt parameters
+                    G = g_all(indices_tk, :, i);                            % linear part wrt parameters
                     
-                    Vinv = zeros(obj.system.K * obj.T);
-                    Vinv(wtk_ind, wtk_ind) = svdinv(obj.V(wtk_ind, wtk_ind, i));
+                    Vinv = zeros(obj.system.K * obj.T);                     % inverse residual covariance matrix estimate
+                    Vinv(indices_tk, indices_tk) = svdinv(obj.V(indices_tk, indices_tk, i));
                     
-                    Th = G' * Vinv(wtk_ind, wtk_ind) * G + obj.settings.prior.prec;
+                                                                            % construct d[beta]/d[dX] and d[beta]/d[X]
+                                                                            % cf. section "S6 First-stage uncertainty estimates for fully observed systems"
+                    Th = G' * Vinv(indices_tk, indices_tk) * G + obj.settings.prior.prec;
                     Thinv = svdinv(Th);
-                    dbeta_ddX = Thinv * G' * Vinv(wtk_ind, wtk_ind);
+                    dbeta_ddX = Thinv * G' * Vinv(indices_tk, indices_tk);  % partial with respect to dX
 
-                    Xi = G' * Vinv(wtk_ind, wtk_ind) * (dX - const) + obj.settings.prior.prec * obj.settings.prior.mean;
+                    Xi = G' * Vinv(indices_tk, indices_tk) * (dX - H) + obj.settings.prior.prec * obj.settings.prior.mean;
                     Thinv_Xi = Thinv * Xi;
                     Pi = zeros(obj.system.P, obj.T, obj.system.K);
                     Psi = zeros(obj.system.P, obj.T, obj.system.K);
                     for k = 1:obj.system.K
                         for j = 2:obj.T-1
                             dg_dxk = dg_all(:, :, j, k, i);
-                            Vinv_j = Vinv(j + obj.T*(0:obj.system.K-1), wtk_ind);
+                            Vinv_j = Vinv(j + obj.T*(0:obj.system.K-1), indices_tk);
 
                             Pi(:, j, k) = (dg_dxk' * Vinv_j * G + G' * Vinv_j' * dg_dxk) * Thinv_Xi;
-                            Psi(:, j, k) = dg_dxk' * Vinv_j * (dX-const) - G' * Vinv_j' * dconst_all(j + obj.T*(0:obj.system.K-1), k, i);
+                            Psi(:, j, k) = dg_dxk' * Vinv_j * (dX-H) - G' * Vinv_j' * dconst_all(j + obj.T*(0:obj.system.K-1), k, i);
                         end
-                    end
-                    dbeta_dX = Thinv * reshape(Psi(:, wt_ind, :) - Pi(:, wt_ind, :), obj.system.P, []);
+                    end                                                     % partial with respect to X
+                    dbeta_dX = Thinv * reshape(Psi(:, indices_t, :) - Pi(:, indices_t, :), obj.system.P, []);
                     
-                    obj.varbeta(:, :, i) = [dbeta_dX dbeta_ddX] * obj.varXdX(wtk_ind2, wtk_ind2, i) * [dbeta_dX dbeta_ddX]';
+                                                                            % delta method approximation
+                    obj.varbeta(:, :, i) = [dbeta_dX dbeta_ddX] * obj.varXdX(indices_2tk, indices_2tk, i) * [dbeta_dX dbeta_ddX]';
                     if converged, return, end
 
-                    % DEFINITION OF var_X
+                                                                            % iterative update of state/gradient covariance
                     identity_O_indices = zeros(obj.L * obj.T, obj.system.K * obj.T);
-                    identity_O_indices(:, O_indices) = eye(obj.L * obj.T);
+                    identity_O_indices(:, ind_obs) = eye(obj.L * obj.T);
                     delta_XdX = zeros(2 * obj.system.K * obj.T);
                     
-                    delta_XdX(H_indices,         wtk_ind2) = dF_dbeta(H_indices, :)  * [dbeta_dX dbeta_ddX];
-                    delta_XdX(H_indices + end/2, wtk_ind2) = ddF_dbeta(H_indices, :) * [dbeta_dX dbeta_ddX];
+                    delta_XdX(ind_hid,         indices_2tk) = dF_dbeta(ind_hid, :)  * [dbeta_dX dbeta_ddX];
+                    delta_XdX(ind_hid + end/2, indices_2tk) = df_dbeta(ind_hid, :) * [dbeta_dX dbeta_ddX];
 
-                    delta_XdX(O_indices,         :) = [identity_O_indices   zeros(obj.L * obj.T, obj.system.K * obj.T)];
-                    delta_XdX(O_indices + end/2, :) = [zeros(obj.L * obj.T, obj.system.K * obj.T)   identity_O_indices];
+                    delta_XdX(ind_obs,         :) = [identity_O_indices   zeros(obj.L * obj.T, obj.system.K * obj.T)];
+                    delta_XdX(ind_obs + end/2, :) = [zeros(obj.L * obj.T, obj.system.K * obj.T)   identity_O_indices];
                     
-                    obj.varXdX(wtk_ind2, wtk_ind2, i) = delta_XdX(wtk_ind2, wtk_ind2) * obj.varXdX(wtk_ind2, wtk_ind2, i) * delta_XdX(wtk_ind2, wtk_ind2)';
+                    obj.varXdX(indices_2tk, indices_2tk, i) = delta_XdX(indices_2tk, indices_2tk) * obj.varXdX(indices_2tk, indices_2tk, i) ...
+                                                                                                  * delta_XdX(indices_2tk, indices_2tk)';
                 end
                 
-                % VARIANCE OF X, dX, AND dX - G(X)beta - H(X)
-                dRHS = zeros(obj.system.K * obj.T);
-                for j = 1:obj.T
-                    dRHS(j + obj.T*(0:obj.system.K-1), j + obj.T*(0:obj.system.K-1)) = dRHS_all(j + obj.T*(0:obj.system.K-1), :, i);
+                df_dX = zeros(obj.system.K * obj.T);                        % residual covariance approximation
+                for j = 1:obj.T                                             % restructure RHS Jacobian
+                    df_dX(j + obj.T*(0:obj.system.K-1), j + obj.T*(0:obj.system.K-1)) = df_dX_all(j + obj.T*(0:obj.system.K-1), :, i);
                 end
-                delta_h = [-dRHS eye(obj.system.K * obj.T)];
-                
-                V_unregulated = delta_h(wtk_ind, wtk_ind2) * obj.varXdX(wtk_ind2, wtk_ind2, i) * delta_h(wtk_ind, wtk_ind2)';
+                residual_gradient = [-df_dX eye(obj.system.K*obj.T)];       % delta method approximation
+                V_unregulated = residual_gradient(indices_tk, indices_2tk) * obj.varXdX(indices_2tk, indices_2tk, i) ...
+                                                                           * residual_gradient(indices_tk, indices_2tk)';
                 
                 regulator = max(1e-12, max(abs(obj.smoothed_fitted(:, :, i)) / 1e6, [], 1));
                 regulator = reshape(repmat(regulator, obj.T-2, 1), 1, []);
-                obj.V(wtk_ind, wtk_ind, i) = V_unregulated + diag(regulator);
+                                                                            % regulated delta method approximation
+                obj.V(indices_tk, indices_tk, i) = V_unregulated + diag(regulator);
             end
         end
     end
