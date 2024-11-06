@@ -11,7 +11,7 @@ classdef ODEIQM < handle
         MEXf                                                                % MEX function
     end
     
-    properties (Access = public)
+    properties (SetAccess = private)
         name                                                                % system name
         K                                                                   % system dimension
         P                                                                   % number of system parameters
@@ -25,21 +25,19 @@ classdef ODEIQM < handle
     end
     
     methods
-        function obj = ODEIQM(name, model_file, varargin)               % Constructor
+        function obj = ODEIQM(model_file, varargin)                     % Constructor
             parser = inputParser();
-            addRequired(parser, 'name', @(x) ischar(x) || isstring(x) );
             addRequired(parser, 'model_file', @(x) (ischar(x) || isstring(x)) ...
                                                    && endsWith(x, '.txt') );
             addParameter(parser, 'FixedParameters', string([]), @isstring);
             addParameter(parser, 'FixedValues', [], @isnumeric);
-            parse(parser, name, model_file, varargin{:});
+            parse(parser, model_file, varargin{:});
             
             assert(isempty(parser.Results.FixedValues) || ...
                    numel(parser.Results.FixedParameters) == numel(parser.Results.FixedValues))
             
             obj.fixed = struct('names', parser.Results.FixedParameters, ...
                                'values', parser.Results.FixedValues);
-            obj.name = name;
             obj.process(model_file);
         end
         
@@ -165,7 +163,12 @@ classdef ODEIQM < handle
         function process(obj, model_file)
             tic
             
+            
             %% process model file
+            contents = fileread(mode_file);                                 % extract system name manually
+            token = regexp(contents, '\*\*\*\*\*\*\*\*\*\* MODEL NAME\s*([^\n]+)\s*\*\*\*\*\*\*\*\*\*\* MODEL NOTES', 'tokens');
+            obj.name = strtrim(token{1}{1});
+            
             installIQMtools;
             obj.model = IQMmodel(model_file);                               % read model file
             obj.MEX = ['MEX' model_file(6:end-4)];

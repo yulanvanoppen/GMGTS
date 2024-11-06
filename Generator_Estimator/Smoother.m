@@ -36,13 +36,11 @@ classdef Smoother < handle
             obj.system = system;                                            
             obj.settings = settings;
             [obj.T, obj.L, obj.N] = size(obj.data.traces);                  % extract trajectory dimensions
+            obj.T_fs = length(settings.t_fs);
 
             obj.scaled = (obj.data.t - obj.data.t(1)) / range(obj.data.t);  % scale to [0, 1]
-            obj.scaled_fs = (obj.settings.grid - obj.data.t(1)) / range(obj.data.t);
-            obj.scaled_fine = linspace(0, 1, 81);                           % equivalent for plotting
-
-            obj.T_fs = length(obj.scaled_fs);
-            obj.T_fine = length(obj.scaled_fine);
+            obj.scaled_fs = (obj.settings.t_fs - obj.data.t(1)) / range(obj.data.t);
+            obj.scaled_fine = (obj.data.t_fine - obj.data.t(1)) / range(obj.data.t);
             
             if settings.autoknots, obj.place_knots(); end
             
@@ -53,7 +51,7 @@ classdef Smoother < handle
             obj.sigma = zeros(1, obj.L);                                    % initialize measurement error variances
             obj.tau = zeros(1, obj.L);
             obj.variances_sm = zeros(obj.T, obj.L, obj.N);
-            obj.variances_fs = zeros(length(settings.grid), obj.L, obj.N);
+            obj.variances_fs = zeros(length(settings.t_fs), obj.L, obj.N);
         end
 
         
@@ -69,8 +67,8 @@ classdef Smoother < handle
                     obj.data.basis_fs, obj.data.dbasis_fs] = deal(cell(1, obj.L));
             
             for k = 1:obj.L
-                obj.B{k} = obj.bsplines{k}.basis(grid);                     % B-spline basis evaluated at t
-                obj.dB{k} = obj.bsplines{k}.basis_diff(grid);               % corresponding first derivative
+                obj.B{k} = obj.bsplines{k}.basis(obj.scaled);               % B-spline basis evaluated at t
+                obj.dB{k} = obj.bsplines{k}.basis_diff(obj.scaled);         % corresponding first derivative
                 obj.data.basis_fs{k} = obj.bsplines{k}.basis(obj.scaled_fs);% save for later use
                 obj.data.dbasis_fs{k} = obj.bsplines{k}.basis_diff(obj.scaled_fs); 
                 obj.B_fine{k} = obj.bsplines{k}.basis(obj.scaled_fine);     % save for smooth plotting
@@ -93,7 +91,7 @@ classdef Smoother < handle
             
             obj.data.t_data = obj.data.t;                                   % prime time point data for first stage
             obj.data.T_data = obj.data.T;
-            obj.data.t = obj.settings.grid;
+            obj.data.t = obj.settings.t_fs;
             obj.data.T = length(obj.data.t);
             
             output = obj.data;                                              % return data extended with smoothing results
@@ -102,7 +100,7 @@ classdef Smoother < handle
         
         function optimize(obj, states)
             if nargin == 1, states = 1:obj.L; end                           % don't overwrite computing time when 
-            if length(states) < obj.L, tic, end                             % the app smoothes single states
+            if length(states) == obj.L, tic, end                            % the app smoothes single states
             
             for iter = 1:obj.settings.niter                                 % FWLS spline coefficient estimates
                 delta_old = obj.delta; 
@@ -117,7 +115,7 @@ classdef Smoother < handle
             obj.data.variances = obj.variances_fs;                          % measurement and first-stage time points
             obj.fit();                                                      % compute splines
             
-            if length(states) < obj.L, obj.data.toc_sm = toc; end
+            if length(states) == obj.L, obj.data.toc_sm = toc; end
         end
         
                                             

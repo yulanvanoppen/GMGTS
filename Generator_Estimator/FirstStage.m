@@ -167,7 +167,6 @@ classdef FirstStage < handle
             obj.dsmoothed_fitted(:, unobserved, :) = obj.dfitted_fs(:, unobserved, :);
             
             if converged                                                    % store smooth versions upon convergence
-                obj.data.t_fine = linspace(obj.data.t(1), obj.data.t(end), 201);
                 obj.data.fitted_fs_fine = max(1e-12, obj.system.integrate(obj.beta_fs, obj.data, obj.data.t_fine));
                 obj.data.dfitted_fs_fine = obj.system.rhs(obj.data.fitted_fs_fine, obj.data.t_fine, obj.beta_fs);
             end

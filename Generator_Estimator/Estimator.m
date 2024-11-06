@@ -11,7 +11,7 @@ classdef Estimator < handle
         
         lb
         ub
-        grid
+        t_fs
         
         nmultistart
         niterSM
@@ -39,6 +39,9 @@ classdef Estimator < handle
     methods
         %% Constructor -----------------------------------------------------
         function obj = Estimator(data, system, varargin)
+            traces
+            if isfield(t)
+            
             default_Stages = 2;
             default_Methods = "GMGTS";
             
@@ -112,7 +115,7 @@ classdef Estimator < handle
             
             obj.lb = parser.Results.LB;
             obj.ub = parser.Results.UB;
-            obj.grid = sort(unique(parser.Results.TimePoints));
+            obj.t_fs = sort(unique(parser.Results.TimePoints));
             obj.niterSM = max(1, round(parser.Results.MaxIterationsSM));
             obj.tolSM = max(1e-12, parser.Results.ConvergenceTolSM);
             obj.nmultistart = max(1, round(parser.Results.NMultiStartFS));
@@ -136,23 +139,25 @@ classdef Estimator < handle
             end
             if ~isfield(obj.prior, 'mult'), obj.prior.mult = 1; end
             
+            obj.data.T_fine = 81;
+            obj.data.t_fine = linspace(obj.data.t(1), obj.data.t(end), obj.data.T_fine);
+            
             if ismember("GMGTS", obj.method), obj.constructor_GMGTS; end
             if ismember("GTS", obj.method), obj.constructor_GTS; end
         end
         
         
         function constructor_GMGTS(obj)
-            weights = ones(length(obj.grid), obj.system.K);
+            weights = ones(length(obj.t_fs), obj.system.K);
             weights([1 end], :) = 0;
             
             obj.GMGTS_settings.sm = struct('order', 4, 'autoknots', obj.autoknots, 'knots', {obj.knots}, ...
-                                           'grid', obj.grid, 'niter', obj.niterSM, 'tol', obj.tolSM, ...
+                                           't_fs', obj.t_fs, 'niter', obj.niterSM, 'tol', obj.tolSM, ...
                                            'interactive', obj.interactive);
-            obj.GMGTS_settings.fs = struct('grid', obj.grid, 'weights', weights, 'initial', obj.system.k0', ...
+            obj.GMGTS_settings.fs = struct('t_fs', obj.t_fs, 'weights', weights, ...
                                            'niter', obj.niterFS, 'tol', obj.tolFS, 'nstart', obj.nmultistart, ...
                                            'lb', obj.lb, 'ub', obj.ub, 'prior', obj.prior);
-            obj.GMGTS_settings.ss = struct('weights', weights, 'nrep', obj.niterSS, ...
-                                           'tol', obj.tolSS, 'prior', obj.prior);
+            obj.GMGTS_settings.ss = struct('weights', weights, 'niter', obj.niterSS, 'tol', obj.tolSS);
         end
         
         
@@ -160,7 +165,7 @@ classdef Estimator < handle
 %             optindices = 1:16;
             optindices = 1:length(obj.data.t);
             
-            obj.GTS_settings.fs = struct('initial', obj.system.k0', 'lb', obj.lb, 'ub', obj.ub, 'optindices', optindices, ...
+            obj.GTS_settings.fs = struct('lb', obj.lb, 'ub', obj.ub, 'optindices', optindices, ...
                                          'nrep', obj.niterFS, 'tol', obj.tolSS, 'nstart', obj.nmultistart, 'prior', obj.prior);
             obj.GTS_settings.ss = struct('nrep', obj.niterSS, 'tol', obj.tolSS, 'prior', obj.prior);
         end
@@ -233,11 +238,11 @@ classdef Estimator < handle
             L = zeros(1, nrep);
             if selected_method == "GMGTS"
                 b = obj.results_GMGTS.b_est;
-                D = obj.results_GMGTS.D_GTS;
+                D = obj.results_GMGTS.D_est;
                 var = @(trace) obj.GMGTS_smoother.theta_fs(1) + obj.GMGTS_smoother.theta_fs(2) * trace.^2;
             else
                 b = obj.results_GTS.b_est;
-                D = obj.results_GTS.D_GTS;
+                D = obj.results_GTS.D_est;
                 var = @(trace) obj.GTS_first_stage.theta_fs(1) + obj.GTS_first_stage.theta_fs(2) * trace.^2;
             end
             
@@ -295,7 +300,7 @@ classdef Estimator < handle
                          @(x) overlaps(x, obj.data.observed) || ...
                               overlaps(x, obj.system.states));
             addParameter(parser, 'Parameters', default_Parameters, ...
-                         @(x) overlaps(x, obj.data.varying) || ...
+                         @(x) overlaps(x, 1:obj.system.P) || ...
                               overlaps(x, obj.system.parameters_variable));
             addParameter(parser, 'MaxCells', default_MaxCells, @(x) x >= 1);
             parse(parser, varargin{:});
@@ -350,7 +355,7 @@ classdef Estimator < handle
                           obj.data.T, n_cells), '-');
 %                 h2 = plot(obj.data.t, reshape(obj.results_GMGTS.smoothed(:, ind(k), 1:n_cells), ...
 %                           obj.data.T, n_cells), '--');
-                h2 = plot(linspace(obj.data.t(1), obj.data.t(end), 201), ...
+                h2 = plot(linspace(obj.data.t(1), obj.data.t(end), 81), ...
                           reshape(obj.results_GMGTS.smoothed_fine(:, ind(k), 1:n_cells), ...
                           [], n_cells), '--');
                 if k == 1, legend([h1(1) h2(1)], 'data', 'smoothing'), end
@@ -367,7 +372,7 @@ classdef Estimator < handle
                 ylabel('gradient')
 %                 h4 = plot(obj.data.t, reshape(obj.results_GMGTS.dsmoothed(:, ind(k), 1:n_cells), ...
 %                           obj.data.T, n_cells), '--');
-                h4 = plot(linspace(obj.data.t(1), obj.data.t(end), 201), ...
+                h4 = plot(linspace(obj.data.t(1), obj.data.t(end), 81), ...
                           reshape(obj.results_GMGTS.dsmoothed_fine(:, ind(k), 1:n_cells), ...
                           [], n_cells), '--');
                 if k == 1, legend(h4(1), 'smoothing'), end
@@ -419,7 +424,7 @@ classdef Estimator < handle
                     title(['$d$ \hspace*{-.3em}' obj.system.states{k} '\hspace*{-.3em} $/dt$'])
                     hold on
                     if ismember(states(k), obj.data.observed)
-                        h = plot(linspace(obj.data.t(1), obj.data.t(end), 201), ...
+                        h = plot(linspace(obj.data.t(1), obj.data.t(end), 81), ...
                                  reshape(obj.results_GMGTS.dsmoothed_fine(:, obs_ind, 1:n_cells), ...
                                          [], n_cells), '--');
                         set(h, {'color'}, col_scheme);
@@ -569,7 +574,7 @@ classdef Estimator < handle
     
     
         function plot_mixed_effects(obj, truth, plot_settings)
-            [params, ~, ind] = intersect(sort(plot_settings.Parameters), obj.data.varying);
+            [params, ~, ind] = intersect(sort(plot_settings.Parameters), 1:obj.system.P);
             n_params = length(params);
             
             figure('position', [70, 10, 1740, 900])
@@ -583,13 +588,13 @@ classdef Estimator < handle
                     nexttile(q + (p-1)*n_params)
                     hold on
                     if q == 1
-                        ylabel(parameter_names(obj.data.varying(ind(p))))
+                        ylabel(parameter_names(ind(p)))
                         if p == 1 || p == n_params
                             legends = [legends legend('AutoUpdate', 'off')]; %#ok<AGROW>
                         end
                     end
                     if p == n_params
-                        xlabel(parameter_names(obj.data.varying(ind(q))))
+                        xlabel(parameter_names(ind(q)))
                     end
                 end
             end
@@ -608,23 +613,23 @@ classdef Estimator < handle
             end
             
             if ismember("GMGTS", obj.method)
-                obj.add_mixed_effects(obj.results_GMGTS.beta_fs(:, obj.data.varying(ind)), ...
-                                      obj.results_GMGTS.b_est(obj.data.varying(ind)), ...
-                                      obj.results_GMGTS.D_GTS(ind, ind), ...
+                obj.add_mixed_effects(obj.results_GMGTS.beta_fs(:, ind), ...
+                                      obj.results_GMGTS.b_est(ind), ...
+                                      obj.results_GMGTS.D_est(ind, ind), ...
                                       labels_ondiag_GMGTS, labels_offdiag_GMGTS, ...
                                       plot_settings, legends, '^')
             end
             if ismember("GTS", obj.method)
-                obj.add_mixed_effects(obj.results_GTS.beta_fs(:, obj.data.varying(ind)), ...
-                                      obj.results_GTS.b_est(obj.data.varying(ind)), ...
-                                      obj.results_GTS.D_GTS(ind, ind), ...
+                obj.add_mixed_effects(obj.results_GTS.beta_fs(:, ind), ...
+                                      obj.results_GTS.b_est(ind), ...
+                                      obj.results_GTS.D_est(ind, ind), ...
                                       labels_ondiag_GTS, labels_offdiag_GTS, ...
                                       plot_settings, legends, 'square')
             end
             if ~isempty(fieldnames(truth))
-                obj.add_mixed_effects(truth.beta(:, obj.data.varying(ind)), ...
-                                      truth.b(obj.data.varying(ind)), ...
-                                      truth.D(obj.data.varying(ind), obj.data.varying(ind)), ...
+                obj.add_mixed_effects(truth.beta(:, ind), ...
+                                      truth.b(ind), ...
+                                      truth.D(ind, ind), ...
                                       labels_ondiag_true, labels_offdiag_true, ...
                                       plot_settings, legends, 'pentagram')
             end
@@ -632,7 +637,7 @@ classdef Estimator < handle
     
 
         function add_mixed_effects(obj, beta, b, D, labels_ondiag, labels_offdiag, plot_settings, legends, marker)
-            params = intersect(sort(plot_settings.Parameters), obj.data.varying);
+            params = intersect(sort(plot_settings.Parameters), 1:obj.system.P);
             
             switch marker
                 case '^', col = [0, 0.4470, 0.7410]; center = ':v'; lw = 1.2;
