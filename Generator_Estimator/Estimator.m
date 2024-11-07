@@ -21,6 +21,7 @@ classdef Estimator < handle
         niterSS                                                             % #iterations for the second stage 
         tolSS                                                               % convergence tolerance for the second stage
         
+        lognormal                                                           % whether to infer lognormal RE distribution
         prior                                                               % parameter prior distribution
         
         GMGTS_settings                                                      % GMGTS settings struct
@@ -41,6 +42,10 @@ classdef Estimator < handle
         function obj = Estimator(system, data, varargin)
             [system, data] = obj.parse_initial(system, data, varargin{:});
             
+            default_t = 0:size(data, 1)-1;
+            default_observed = 1:size(data, 2);
+            default_init = 1e-4 * ones(1, system.K);
+            
             default_Stages = 2;
             default_Methods = "GMGTS";
             
@@ -48,10 +53,12 @@ classdef Estimator < handle
             default_AutoKnots = true;
             default_Knots = repmat({linspace(data.t(1), data.t(end), round((data.T-1)/2)+1)}, ...
                                    1, length(data.observed));
+            default_InteractiveSmoothing = false;
             
             default_LB = .25 * initial;
             default_UB = 4 .* initial + .0001 * mean(initial);
             default_TimePoints = data.t(1) + (0:.1:1) * range(data.t);
+            
             default_MaxIterationsSM = 20;
             default_ConvergenceTolSM = 1e-3;
             default_NMultiStartFS = 10;
@@ -59,14 +66,16 @@ classdef Estimator < handle
             default_ConvergenceTolFS = 2e-3;
             default_MaxIterationsSS = 10;
             default_ConvergenceTolSS = 1e-2;
+            
             default_Prior = struct('mean', 0, 'prec', 0);
+            default_LogNormal = false;
             
             parser = inputParser;
             addRequired(parser, 'system', @(x) isa(x, 'ODEIQM') || isstring(string(x)) && numel(string(x)) == 1);
             addRequired(parser, 'data', @(x) isstruct(x) || isnumeric(x) && ndims(x) == 3 && size(x, 1) > 1);
-            addOptional(parser, 't', @(x) isnumeric(x) && numel(unique(x)) == data.T);
-            addOptional(parser, 'observed', @(x) isnumeric(x) && numel(unique(x)) == data.L);
-            addOptional(parser, 'init', @(x) isnumeric(x) && numel(x) == system.K);
+            addOptional(parser, 't', default_t, @(x) isnumeric(x) && numel(unique(x)) == data.T);
+            addOptional(parser, 'observed', default_observed, @(x) isnumeric(x) && numel(unique(x)) == data.L);
+            addOptional(parser, 'init', default_init, @(x) isnumeric(x) && numel(x) == system.K);
             
             addParameter(parser, 'Stages', default_Stages, @(x) ismember(x, 0:2));
             addParameter(parser, 'Methods', default_Methods, ...
@@ -75,11 +84,12 @@ classdef Estimator < handle
             addParameter(parser, 'Knots', default_Knots, @(x) (iscell(x) && length(x) == data.L ...
                                                                && all(cellfun(@isnumeric, x))) ...
                                                            || isnumeric(x));
-            addParameter(parser, 'InteractiveSmoothing', false, @islogical);
+            addParameter(parser, 'InteractiveSmoothing', default_InteractiveSmoothing, @islogical);
 
             addParameter(parser, 'LB', default_LB, @(x) all(x < initial));
             addParameter(parser, 'UB', default_UB, @(x) all(x > initial));
             addParameter(parser, 'TimePoints', default_TimePoints, @(x) all(data.t(1) <= x & x <= data.t(end)));
+            
             addParameter(parser, 'MaxIterationsSM', default_MaxIterationsSM, @isscalar);
             addParameter(parser, 'ConvergenceTolSM', default_ConvergenceTolSM, @isscalar);
             addParameter(parser, 'NMultiStartFS', default_NMultiStartFS, @isscalar);
@@ -87,6 +97,8 @@ classdef Estimator < handle
             addParameter(parser, 'ConvergenceTolFS', default_ConvergenceTolFS, @isscalar);
             addParameter(parser, 'MaxIterationsSS', default_MaxIterationsSS, @isscalar);
             addParameter(parser, 'ConvergenceTolSS', default_ConvergenceTolSS, @isscalar);
+            
+            addParameter(parser, 'LogNormal', default_LogNormal, @islogical)
             addParameter(parser, 'Prior', default_Prior, @(x) isfield(x, 'mean') && numel(x.mean) == system.P ...
                                                            && (isfield(x, 'prec') && all(size(x.prec) == system.P) ...
                                                                && issymmetric(x.prec) && all(eig(x.prec) >= 0) ...
@@ -110,7 +122,7 @@ classdef Estimator < handle
             if ~isa(system, 'ODEIQM'), system = ODEIQM(string(system)); end % process model file if provided
             if isstruct(data)                                               % default any missing fields
                 if ~isfield(data, 'traces') && isfield(data, 'y'), data.traces = data.y; end
-                if ~isfield(data, 't'), data.t = 0:size(data.traces, 1); end
+                if ~isfield(data, 't'), data.t = 0:size(data.traces, 1)-1; end
                 if ~isfield(data, 'observed'), data.observed = 1:size(data.traces, 2); end
                 if ~isfield(data, 'init'), data.init = system.x0' + 1e-4; end
             else                                                            % components provided separately
@@ -129,7 +141,7 @@ classdef Estimator < handle
                         init = 1e-4 * ones(1, system.K);
                     end
                 else
-                    t = 0:size(traces, 1);
+                    t = 0:size(traces, 1)-1;
                     observed = 1:size(traces, 2);
                     init = 1e-4 * ones(1, system.K);
                 end                                                         % compile into struct
@@ -166,7 +178,8 @@ classdef Estimator < handle
             obj.tolFS = max(1e-12, parser.Results.ConvergenceTolFS);
             obj.niterSS = max(1, round(parser.Results.MaxIterationsSS));
             obj.tolSS = max(1e-12, parser.Results.ConvergenceTolSS);
-
+            
+            obj.lognormal = parser.Results.LogNormal;
             obj.prior = parser.Results.Prior;
             obj.prior.mean = reshape(obj.prior.mean, [], 1);
             if isfield(obj.prior, 'cv')
@@ -185,16 +198,17 @@ classdef Estimator < handle
         
         
         function constructor_GMGTS(obj)
-            weights = ones(length(obj.t_fs), obj.system.K);
+            weights = ones(length(obj.t_fs), obj.system.K);                 % omit interval ends
             weights([1 end], :) = 0;
             
             obj.GMGTS_settings.sm = struct('order', 4, 'autoknots', obj.autoknots, 'knots', {obj.knots}, ...
                                            't_fs', obj.t_fs, 'niter', obj.niterSM, 'tol', obj.tolSM, ...
                                            'interactive', obj.interactive);
-            obj.GMGTS_settings.fs = struct('t_fs', obj.t_fs, 'weights', weights, ...
+            obj.GMGTS_settings.fs = struct('lb', obj.lb, 'ub', obj.ub, 't_fs', obj.t_fs, 'weights', weights, ...
                                            'niter', obj.niterFS, 'tol', obj.tolFS, 'nstart', obj.nmultistart, ...
-                                           'lb', obj.lb, 'ub', obj.ub, 'prior', obj.prior);
-            obj.GMGTS_settings.ss = struct('weights', weights, 'niter', obj.niterSS, 'tol', obj.tolSS);
+                                           'lognormal', obj.lognormal, 'prior', obj.prior);
+            obj.GMGTS_settings.ss = struct('weights', weights, 'niter', obj.niterSS, 'tol', obj.tolSS, ...
+                                           'lognormal', obj.lognormal);
         end
         
         
@@ -689,7 +703,11 @@ classdef Estimator < handle
                     if q == p
                         h1 = histogram(beta(:, p), 20, 'Normalization', 'pdf', 'FaceColor', col, 'FaceAlpha', .3);
                         grid = linspace(min(beta(:, p)), max(beta(:, p)), 30);
-                        pdf = normpdf(grid, b(p), sqrt(D(p, p)));
+                        if obj.lognormal
+                            pdf = lognpdf(grid, b(p), sqrt(D(p, p)));
+                        else
+                            pdf = normpdf(grid, b(p), sqrt(D(p, p)));
+                        end
                         h2 = plot(grid, pdf, 'Color', col, 'LineWidth', 1.5);
                         patch([grid flip(grid)], [pdf 0*pdf], col, 'FaceAlpha', .4);
                         if p == 1
@@ -698,7 +716,11 @@ classdef Estimator < handle
                     else
 %                         disp('')
                         h1 = scatter(beta(:, q), beta(:, p), [], col, marker, 'MarkerEdgeAlpha', .3, 'LineWidth', lw);
-                        h2 = Estimator.mvncontour(b([q p]), D([q p], [q p]), center, 'Color', col, 'LineWidth', lw);
+                        if obj.lognormal
+                            h2 = Estimator.mvlncontour(b([q p]), D([q p], [q p]), center, 'Color', col, 'LineWidth', lw);
+                        else
+                            h2 = Estimator.mvncontour(b([q p]), D([q p], [q p]), center, 'Color', col, 'LineWidth', lw);
+                        end
                         if p == n_params && q == 1
                             add_legendentry(legends(2), [h1 h2], labels_offdiag);
                         end
@@ -752,6 +774,62 @@ classdef Estimator < handle
             h = [h1 h2];
             
             warning(ws)
+        end
+        
+        
+        function h = mvlncontour(m, S, marker, levels, varargin)
+            manual = true;
+            if ~isnumeric(levels)
+                varargin = [{levels} varargin];
+%                 levels = [.68 .95];
+                levels = (normcdf(.25:.25:2)-.5)*2;
+                manual = false;
+            end
+            
+            ws = warning('off', 'MATLAB:nearlySingularMatrix');
+            
+            h1 = plot(exp(m(1)), exp(m(2)), marker, varargin{:});
+%             h1 = plot(m(1), m(2), marker, 'Color', [1 0 1], varargin{:});
+            
+            S = nearestSPD(S);
+            x = linspace(exp(m(1) - 3*sqrt(S(1, 1))), exp(m(1) + 3*sqrt(S(1, 1))), 40);
+            y = linspace(exp(m(2) - 3*sqrt(S(2, 2))), exp(m(2) + 3*sqrt(S(2, 2))), 40);
+
+            p = zeros(length(x), length(y));
+            for i = 1:length(x)
+                for j = 1:length(y)
+                    p(i, j) = Estimator.mvlnpdf([x(i) y(j)], m, S);
+                end
+            end
+
+            S_inv = pinv(S);
+            quantiles = sqrt(chi2inv(levels, 2) / S_inv(1, 1));
+            levels_transf = Estimator.mvlnpdf(exp(m+[quantiles' zeros(length(levels), 1)]), m, S);
+%             if max(levels) > 1e8, levels = min(levels, 1e16) / max(levels) * 1e8; end
+            if any(~isfinite(levels_transf))
+                disp(1)
+            end
+            if manual
+                [~, h2] = contour(kron(x', ones(1, length(y))), kron(y, ones(length(x), 1)), p, marker);
+%                 [~, h2] = contour(kron(x', ones(1, length(y))), kron(y, ones(length(x), 1)), p, marker, varargin{:});
+            else
+                [~, h2] = contour(kron(x', ones(1, length(y))), kron(y, ones(length(x), 1)), p, marker, varargin{:});
+            end
+            h2.LevelList = levels_transf;
+            
+            h = [h1 h2];
+            
+            warning(ws)
+        end
+        
+        
+        function p = mvlnpdf(x, m, S)
+            [n, d] = size(x);
+            p = zeros(size(x, 1), 1);
+            for i = 1:n
+                p(i) = (2*pi)^(-d/2) * det(S)^-1 * prod(x(i, :)) ...
+                                     * exp(-.5 * (log(x(i, :))-m) * inv(S) * (log(x(i, :))-m)');
+            end
         end
     end
 end

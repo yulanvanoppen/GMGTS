@@ -187,6 +187,26 @@ classdef FirstStage < handle
             obj.data.varbeta = obj.varbeta;
             obj.data.convergence_steps = obj.convergence_steps;
             obj.data.converged = setdiff(1:obj.N, obj.not_converged);
+            if obj.settings.lognormal, obj.lognormal_approximation(), end
+        end
+        
+        
+        function lognormal_approximation(obj)
+            obj.data.beta_lnorm = zeros(size(obj.beta_fs));
+            obj.data.varbeta_lnorm = zeros(size(obj.varbeta));
+            for i = 1:obj.N
+                beta_i = obj.beta_fs(i, :)';
+                varbeta_i = obj.varbeta(:, :, i);
+                                                                            % moment matching
+                obj.data.varbeta_lnorm(:, :, i) = log(1 + varbeta_i ./ (beta_i*beta_i'));
+                obj.data.beta_lnorm(i, :) = log(beta_i') - .5 * diag(obj.data.varbeta_lnorm(:, :, i))';
+                
+                                                                            % unbiased log
+%                 diag_i = diag(log(.5 + sqrt(.25 + diag(diag(varbeta_i)./beta_i.^2))));
+%                 full_i = log(varbeta_i ./ (beta_i * beta_i') .* exp(-.5 * (diag_i * diag_i')) + 1);
+%                 obj.data.varbeta_lnorm(:, :, i) = full_i - diag(diag_i - diag(full_i));
+%                 obj.data.beta_lnorm(i, :) = log(beta_i');
+            end
         end
         
         

@@ -35,16 +35,17 @@ methods = [];
 methods = [methods "GMGTS"];
 % methods = [methods "GTS"];
 
-estimator = Estimator(system, data.traces, data.t ...                        % estimator setup
+estimator = Estimator(system, data.traces, data.t, 2 ...                    % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      ...%, 'InteractiveSmoothing', true ...
+                      , 'LogNormal', true ...
                       );
 
 estimator.estimate();
 
 close all
-plot(estimator, 'True', ground_truth ...
+plot(estimator ...
+     ...%, 'True', ground_truth ...
      , 'States', 1:6 ...
      , 'MaxCells', 7)
 

@@ -17,10 +17,13 @@ classdef SecondStage < handle
             obj.system = system;
             obj.settings = settings;
             
-            obj.beta = data.beta_fs;                                  % initial estimates from first stage results
+            obj.beta = data.beta_fs;                                        % initial estimates from first stage results
+            if settings.lognormal
+                obj.beta = data.beta_lnorm;
+            end                           
 %             obj.beta = data.beta_fs(obj.data.converged, :);
-            obj.b = mean(data.beta_fs);                             % sample mean and covariance
-            obj.D = cov(data.beta_fs);
+            obj.b = mean(obj.beta);                                         % sample mean and covariance
+            obj.D = cov(obj.beta);
         end
         
                                                                         % Main optimization function
@@ -29,12 +32,12 @@ classdef SecondStage < handle
             
             for iter = 1:obj.settings.niter
                 fixed = diag(obj.D(:, :, iter)) < max(diag(obj.D(:, :, iter))) / 1e6;
-                Dinv_iter = zeros(size(obj.D(:, :, iter)));                   % invert current estimate of D
+                Dinv_iter = zeros(size(obj.D(:, :, iter)));                 % invert current estimate of D
                 Dinv_iter(~fixed, ~fixed) = svdinv(obj.D(~fixed, ~fixed, iter));
                 Dinv_iter(fixed, fixed) = diag(Inf(1, sum(fixed)));
                                                                             % iterate until convergence:
-                obj.E_step(iter, Dinv_iter)                                   % - refine cell-specific estimates
-                obj.M_step(iter, Dinv_iter)                                   % - refine population estimates and covariances
+                obj.E_step(iter, Dinv_iter)                                 % - refine cell-specific estimates
+                obj.M_step(iter, Dinv_iter)                                 % - refine population estimates and covariances
                 
                 if eucl_rel(obj.b(iter, :), obj.b(iter+1, :)) < obj.settings.tol && ...
                    eucl_rel(obj.D(:, :, iter), obj.D(:, :, iter+1), true) < obj.settings.tol
@@ -88,20 +91,27 @@ classdef SecondStage < handle
         
         function extract_estimates(obj)                                 % Collect final estimates and predictions
             obj.data.precision = obj.precision;
-            obj.data.beta_ss = max(0, obj.beta(:, :, end));                % cell parametes
-            obj.data.b_est = max(0, obj.b(end, :));                         % population means
+            if obj.settings.lognormal
+                obj.data.beta_ss = exp(obj.beta(:, :, end));
+                obj.data.b_est = obj.b(end, :);                             % parameter population mean trajectory
+                obj.data.population = obj.system.integrate(exp(obj.data.b_est), obj.data, obj.data.t_fine);
+            else
+                obj.data.beta_ss = max(0, obj.beta(:, :, end));             % cell parametes
+                obj.data.b_est = max(0, obj.b(end, :));                     % population means
+                obj.data.population = obj.system.integrate(obj.data.b_est, obj.data, obj.data.t_fine);
+            end
             obj.data.D_est = obj.D(:, :, end);                              % random effect covariance
                                                                             % fitted trajectories for empirical Bayes estimators
             obj.data.fitted2 = obj.system.integrate(obj.data.beta_ss, obj.data, obj.data.t_fine);
-            
-                                                                            % parameter population mean trajectory
-            obj.data.population = obj.system.integrate(obj.data.b_est, obj.data, obj.data.t_fine);
         end
         
         
         function estimate_precisions(obj)                               % Inverse covariance matrix estimates
             for i = 1:obj.data.N
                 covariance = obj.data.varbeta(:, :, i);
+                if obj.settings.lognormal
+                    covariance = obj.data.varbeta_lnorm(:, :, i);
+                end
                 
                 fixed = diag(covariance) < max(diag(covariance)) / 1e6;     % manual correction for near-zero uncertainty
                 obj.precision(~fixed, ~fixed, i) = svdinv(covariance(~fixed, ~fixed));

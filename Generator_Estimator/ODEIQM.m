@@ -18,10 +18,13 @@ classdef ODEIQM < handle
         states                                                              % state names
         parameters                                                          % parameters
         parameters_variable                                                 % parameters excluding fixed
-        fixed                                                               % fixed parameter names and values
         fixed_indices                                                       % fixed parameter indices
         x0                                                                  % model initial conditions
         k0                                                                  % model initial parameters
+    end
+    
+    properties (Access = public)
+        fixed                                                               % fixed parameter names and values
     end
     
     methods

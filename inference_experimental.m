@@ -99,74 +99,71 @@ end
 %% Estimate ----------------------------------------------------------------
 methods = [];
 methods = [methods "GMGTS"];
-methods = [methods "GTS"];
+% methods = [methods "GTS"];
 
 knots = [12.5 25 50];
-
-name = 'maturation_fluorescence';
 
 mkdir('estimates_experimental')
 mkdir('estimates_experimental_fixed_km')
 
-for idx = 1:size(DATA, 2)
+for idx = size(DATA, 2)
     if idx < 7, model = 'model_maturation_twostep.txt'; else, model = 'model_maturation_onestep.txt'; end
     disp(data(idx).name);
     
-    system = ODEIQM(name, model, 'FixedParameters', ["kr" "kdr" "kdil" "d"]);
+    system = ODEIQM(model, 'FixedParameters', ["kr" "kdr" "kdil" "d"]);
     system.fixed.values(3) = data(idx).kdil;
     data(idx).init = system.x0' + 1e-6;
     data(idx).observed = system.K;
-    data(idx).varying = 1:system.P;
-    estimator = Estimator(data(idx), system ...                                     % estimator setup
-                          , 'Stages', 2 ...                                      % 0: smoothing only, 1: first stage only
-                          , 'Methods', methods ...                               % GMGT, GTS, or both
+    estimator = Estimator(system, data(idx) ...                             % estimator setup
+                          , 'Stages', 2 ...                                 % 0: smoothing only, 1: first stage only
+                          , 'Methods', methods ...                          % GMGT, GTS, or both
                           , 'Knots', knots ...
                           , 'LB', [.001 .001] ...
                           , 'UB', [20 1] ...
+                          , 'LogNormal', true ...
                          );
     estimator.estimate();
 %     data(idx).logL_variable_GMGTS = estimator.loglik(5);
 %     data(idx).logL_variable = estimator.loglik(5, "GTS");
     
-%     close all
-%     plot(estimator, 'States', 1:system.K, 'MaxCells', 100)
+    close all
+    plot(estimator, 'States', 1:system.K, 'MaxCells', 100)
     
-    save(['estimates_experimental/'  data(idx).file(9:end-5) '.mat'])
+% % % %     save(['estimates_experimental/'  data(idx).file(9:end-5) '.mat'])
     
 
-    system = ODEIQM(name, model, 'FixedParameters', ["kr" "kdr" "kdil" "d" "km"]);
-    system.fixed.values(end) = estimator.results_GMGTS.b_est(end);
-    data(idx).varying = 1:system.P;
-    estimator = Estimator(data(idx), system ...                                     % estimator setup
-                          , 'Stages', 2 ...                                      % 0: smoothing only, 1: first stage only
-                          , 'Methods', methods ...                               % GMGT, GTS, or both
-                          , 'Knots', knots ...
-                          , 'LB', .001 ...
-                          , 'UB', 20 ...
-                         );
-    estimator.estimate();
-%     data(idx).logL_fixed_GMGTS = estimator.loglik(5);
-%     data(idx).logL_fixed = estimator.loglik(5, "GTS");
-    
-%     plot(estimator, 'States', 2:system.K, 'MaxCells', 10)
-    
-    save(['estimates_experimental_fixed_km/'  data(idx).file(9:end-5) '.mat'])
+% % % % % % %     system = ODEIQM(model, 'FixedParameters', ["kr" "kdr" "kdil" "d" "km"]);
+% % % % % % %     system.fixed.values(end) = estimator.results_GMGTS.b_est(end);
+% % % % % % %     estimator = Estimator(system, data(idx) ...                             % estimator setup
+% % % % % % %                           , 'Stages', 2 ...                                 % 0: smoothing only, 1: first stage only
+% % % % % % %                           , 'Methods', methods ...                          % GMGT, GTS, or both
+% % % % % % %                           , 'Knots', knots ...
+% % % % % % %                           , 'LB', .001 ...
+% % % % % % %                           , 'UB', 20 ...
+% % % % % % %                          );
+% % % % % % %     estimator.estimate();
+% % % % % % % %     data(idx).logL_fixed_GMGTS = estimator.loglik(5);
+% % % % % % % %     data(idx).logL_fixed = estimator.loglik(5, "GTS");
+% % % % % % %     
+% % % % % % % %     plot(estimator, 'States', 2:system.K, 'MaxCells', 10)
+% % % % % % %     
+% % % % % % % % % % %     save(['estimates_experimental_fixed_km/'  data(idx).file(9:end-5) '.mat'])
 end
 
 
 
 %% Likelihood comparison
-[std(reshape([data.logL_fixed_GMGTS], [], 12)', 0, 2),...
- mean(reshape([data.logL_fixed_GMGTS], [], 12)', 2),...
- mean(reshape([data.logL_variable_GMGTS], [], 12)', 2),...
- std(reshape([data.logL_variable_GMGTS], [], 12)', 0, 2)]
-
-mean(reshape([data.logL_fixed_GMGTS], [], 12)', 2) ...
-     < mean(reshape([data.logL_variable_GMGTS], [], 12)', 2)
- 
-printable = {data(:).name}';
-printable = [printable compose('%.0f', mean(reshape([data.logL_fixed_GMGTS], [], 12)', 2))];
-printable = [printable compose('%.0f', mean(reshape([data.logL_variable_GMGTS], [], 12)', 2))];
-fprintf(repmat('%s & %s & %s \\\\ \n', 1, length(data)), string(printable'))
+% [std(reshape([data.logL_fixed_GMGTS], [], 12)', 0, 2),...
+%  mean(reshape([data.logL_fixed_GMGTS], [], 12)', 2),...
+%  mean(reshape([data.logL_variable_GMGTS], [], 12)', 2),...
+%  std(reshape([data.logL_variable_GMGTS], [], 12)', 0, 2)]
+% 
+% mean(reshape([data.logL_fixed_GMGTS], [], 12)', 2) ...
+%      < mean(reshape([data.logL_variable_GMGTS], [], 12)', 2)
+%  
+% printable = {data(:).name}';
+% printable = [printable compose('%.0f', mean(reshape([data.logL_fixed_GMGTS], [], 12)', 2))];
+% printable = [printable compose('%.0f', mean(reshape([data.logL_variable_GMGTS], [], 12)', 2))];
+% fprintf(repmat('%s & %s & %s \\\\ \n', 1, length(data)), string(printable'))
 
 
