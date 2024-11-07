@@ -1,27 +1,27 @@
 classdef Estimator < handle
     properties (SetAccess = private)
-        data                                                                % observed data struct
+        data                                                                % measurements struct
         system                                                              % ODE system object
         
         stages                                                              % stages to execute
         method                                                              % method(s) to conduct inference
-        autoknots
-        knots
-        interactive
+        autoknots                                                           % logical for placement heuristoic
+        knots                                                               % B-spline knots for each state
+        interactive                                                         % logical for interactive smoothing app use
         
-        lb
-        ub
-        t_fs
+        lb                                                                  % parameter space lower bounds
+        ub                                                                  % parameter space upper bounds
+        t_fs                                                                % first stage optimization grid (GMGTS)
         
-        nmultistart
-        niterSM
-        tolSM
-        niterFS
-        tolFS
-        niterSS
-        tolSS
+        nmultistart                                                         % #starting points for first stage initialization
+        niterSM                                                             % #iterations for smoothing
+        tolSM                                                               % convergence tolerance for smoothing
+        niterFS                                                             % #iterations for the first stage
+        tolFS                                                               % convergence tolerance for the first stage
+        niterSS                                                             % #iterations for the second stage 
+        tolSS                                                               % convergence tolerance for the second stage
         
-        prior
+        prior                                                               % parameter prior distribution
         
         GMGTS_settings                                                      % GMGTS settings struct
         GMGTS_smoother                                                      % GMGTS smoothing object
@@ -39,36 +39,7 @@ classdef Estimator < handle
     methods
         %% Constructor -----------------------------------------------------
         function obj = Estimator(system, data, varargin)
-            if ~isa(system, 'ODEIQM'), system = ODEIQM(string(system)); end
-            if isstruct(data)
-                if ~isfield(data, 'traces') && isfield(data, 'y'), data.traces = data.y; end
-                if ~isfield(data, 't'), data.t = 0:size(data.traces, 1); end
-                if ~isfield(data, 'observed'), data.observed = 1:size(data.traces, 2); end
-                if ~isfield(data, 'init'), data.init = system.x0' + 1e-4; end
-            else
-                traces = data;
-                if ~iscellstr(varargin(1)) %#ok<ISCLSTR>
-                    t = sort(unique(reshape(varargin{1}, 1, [])));
-                    if ~iscellstr(varargin(2)) %#ok<ISCLSTR>
-                        observed = sort(unique(reshape(varargin{2}, 1, [])));
-                        if ~iscellstr(varargin(3)) %#ok<ISCLSTR>
-                            init = reshape(varargin{3}, 1, []);
-                        else
-                            init = 1e-4 * ones(1, system.K);
-                        end
-                    else
-                        observed = 1:size(traces, 2);
-                        init = 1e-4 * ones(1, system.K);
-                    end
-                else
-                    t = 0:size(traces, 1);
-                    observed = 1:size(traces, 2);
-                    init = 1e-4 * ones(1, system.K);
-                end
-                data = struct('traces', traces, 't', t, 'observed', observed, 'init', init);
-            end
-            [data.T, data.L, data.N] = size(data.traces);
-            
+            [system, data] = obj.parse_initial(system, data, varargin{:});
             
             default_Stages = 2;
             default_Methods = "GMGTS";
@@ -93,15 +64,15 @@ classdef Estimator < handle
             parser = inputParser;
             addRequired(parser, 'system', @(x) isa(x, 'ODEIQM') || isstring(string(x)) && numel(string(x)) == 1);
             addRequired(parser, 'data', @(x) isstruct(x) || isnumeric(x) && ndims(x) == 3 && size(x, 1) > 1);
-            addOptional(parser, 't', @(x) isnumeric(x) && numel(unique(x)) == size(data.traces, 1));
-            addOptional(parser, 'observed', @(x) isnumeric(x) && numel(unique(x)) == size(data.traces, 2));
+            addOptional(parser, 't', @(x) isnumeric(x) && numel(unique(x)) == data.T);
+            addOptional(parser, 'observed', @(x) isnumeric(x) && numel(unique(x)) == data.L);
             addOptional(parser, 'init', @(x) isnumeric(x) && numel(x) == system.K);
             
             addParameter(parser, 'Stages', default_Stages, @(x) ismember(x, 0:2));
             addParameter(parser, 'Methods', default_Methods, ...
                          @(x) all(ismember(upper(string(x)), ["GMGTS" "GTS"])));
             addParameter(parser, 'AutoKnots', default_AutoKnots, @islogical);
-            addParameter(parser, 'Knots', default_Knots, @(x) (iscell(x) && length(x) == length(data.observed) ...
+            addParameter(parser, 'Knots', default_Knots, @(x) (iscell(x) && length(x) == data.L ...
                                                                && all(cellfun(@isnumeric, x))) ...
                                                            || isnumeric(x));
             addParameter(parser, 'InteractiveSmoothing', false, @islogical);
@@ -124,51 +95,63 @@ classdef Estimator < handle
                                                             || isfield(x, 'cv') && numel(x.cv) == system.P ...
                                                                && all(x.cv > 0)));
             parse(parser, system, data, varargin{:});
+            [obj.system, obj.data] = obj.parse_initial(parser.Results.system, parser.Results.data, varargin{:});
+            obj.parse_parameters(parser);
             
-            system = parser.Results.system;
-            if ~isa(system, 'ODEIQM'), system = ODEIQM(string(system)); end
-            obj.system = system;
+            obj.data.T_fine = 81;
+            obj.data.t_fine = linspace(obj.data.t(1), obj.data.t(end), obj.data.T_fine);
             
-            data = parser.Results.data;
-            if isstruct(data)
+            if ismember("GMGTS", obj.method), obj.constructor_GMGTS; end
+            if ismember("GTS", obj.method), obj.constructor_GTS; end
+        end
+
+                                                                        % Basic parsing to allow conditional input validations
+        function [system, data] = parse_initial(~, system, data, varargin)  
+            if ~isa(system, 'ODEIQM'), system = ODEIQM(string(system)); end % process model file if provided
+            if isstruct(data)                                               % default any missing fields
                 if ~isfield(data, 'traces') && isfield(data, 'y'), data.traces = data.y; end
                 if ~isfield(data, 't'), data.t = 0:size(data.traces, 1); end
                 if ~isfield(data, 'observed'), data.observed = 1:size(data.traces, 2); end
                 if ~isfield(data, 'init'), data.init = system.x0' + 1e-4; end
-            else
-                traces = data;
-                if iscellstr(varargin(1)) %#ok<ISCLSTR>
-                    t = 0:size(traces, 1);
-                else
+            else                                                            % components provided separately
+                traces = data;                                              % array with measurements instead of struct
+                if ~iscellstr(varargin(1)) %#ok<ISCLSTR>                    % recursively check if optional or Name/Value
                     t = sort(unique(reshape(varargin{1}, 1, [])));
-                end
-                if iscellstr(varargin(2)) %#ok<ISCLSTR>
+                    if ~iscellstr(varargin(2)) %#ok<ISCLSTR>
+                        observed = sort(unique(reshape(varargin{2}, 1, [])));
+                        if ~iscellstr(varargin(3)) %#ok<ISCLSTR>
+                            init = reshape(varargin{3}, 1, []);
+                        else                                                % substitute defaults instead
+                            init = 1e-4 * ones(1, system.K);
+                        end
+                    else
+                        observed = 1:size(traces, 2);
+                        init = 1e-4 * ones(1, system.K);
+                    end
+                else
+                    t = 0:size(traces, 1);
                     observed = 1:size(traces, 2);
-                else
-                    observed = sort(unique(reshape(varargin{2}, 1, [])));
-                end
-                if iscellstr(varargin(3)) %#ok<ISCLSTR>
                     init = 1e-4 * ones(1, system.K);
-                else
-                    init = reshape(varargin{3}, 1, []);
-                end
+                end                                                         % compile into struct
                 data = struct('traces', traces, 't', t, 'observed', observed, 'init', init);
             end
-            [data.T, data.L, data.N] = size(data.traces);
-            obj.data = data;
-            
+            [data.T, data.L, data.N] = size(data.traces);                   % include dimensions for notational convenience
+        end
+
+
+        function parse_parameters(obj, parser)                               % Parse Name/Value constructor arguments
             obj.stages = parser.Results.Stages;
             obj.method = string(parser.Results.Methods);
             obj.autoknots = parser.Results.AutoKnots;
-            obj.knots = cell(1, length(data.observed));
+            obj.knots = cell(1, obj.data.L);
             parsed_knots = parser.Results.Knots;
             if ~iscell(parsed_knots)
-                parsed_knots = repmat({parsed_knots}, 1, length(data.observed));
+                parsed_knots = repmat({parsed_knots}, 1, obj.data.L);
             end
-            for state = 1:length(data.observed)
-                truncated = max(data.t(1), min(data.t(end), parsed_knots{state}));
-                arranged = sort(unique([data.t(1) reshape(truncated, 1, []) data.t(end)]));
-                obj.knots{state} = (arranged - data.t(1)) / range(data.t);
+            for state = 1:length(obj.data.observed)
+                truncated = max(obj.data.t(1), min(obj.data.t(end), parsed_knots{state}));
+                arranged = sort(unique([obj.data.t(1) reshape(truncated, 1, []) obj.data.t(end)]));
+                obj.knots{state} = (arranged - obj.data.t(1)) / range(obj.data.t);
             end
             obj.autoknots = parser.Results.AutoKnots && ismember("Knots", string(parser.UsingDefaults));
             obj.interactive = parser.Results.InteractiveSmoothing;
@@ -198,12 +181,6 @@ classdef Estimator < handle
                 warning('on','MATLAB:singularMatrix')
             end
             if ~isfield(obj.prior, 'mult'), obj.prior.mult = 1; end
-            
-            obj.data.T_fine = 81;
-            obj.data.t_fine = linspace(obj.data.t(1), obj.data.t(end), obj.data.T_fine);
-            
-            if ismember("GMGTS", obj.method), obj.constructor_GMGTS; end
-            if ismember("GTS", obj.method), obj.constructor_GTS; end
         end
         
         

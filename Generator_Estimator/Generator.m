@@ -85,7 +85,7 @@ classdef Generator < handle
         end
         
         
-        function generate(obj, beta)                                    % Generate data
+        function [measurements, ground_truth] = generate(obj, beta)     % Generate data
             obj.data.b = obj.settings.b;                                    % copy relevant settings
             obj.data.D = obj.settings.D;
             obj.data.init = obj.settings.init;
@@ -109,7 +109,18 @@ classdef Generator < handle
             
             errors = normrnd(0, obj.settings.error_std, size(obj.data.original));
             obj.data.traces = obj.data.original .* (1 + errors);            % multiplicative measurement noise
+
+            [measurements, ground_truth] = obj.separate(obj);
         end
+
+
+        function [measurements, ground_truth] = separate(obj)           % Separate simulated measurements from ground truth
+            ground_truth = obj.data;
+            measurements = struct('traces', obj.data.traces(:, obj.data.observed, :), ...
+                                  't', obj.data.t, 'observed', obj.data.observed, ...
+                                  'init', obj.data.init, 'T', obj.data.T, 'L', obj.data.L, 'N', obj.data.N);
+        end
+    
         
         
         function plot(obj)
