@@ -93,15 +93,18 @@ classdef FirstStage < handle
         
         
         function initialize(obj)                                        % Initial numerical optimization on population average
-            options = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-2);
-            value = Inf;
-            for start = 1:obj.settings.nstart                               % uniformly sample in log parameter space
-                logb0 = rand(1, obj.system.P) .* (log(obj.settings.ub) - log(obj.settings.lb)) + log(obj.settings.lb);
-                [opt_new, value_new] = fmincon(@(logb0) obj.squares_sum(exp(logb0)), logb0, [], [], [], [], ...
-                                               log(obj.settings.lb), log(obj.settings.ub), [], options);
-                if value_new < value, value = value_new; opt = opt_new; end
-            end
-            obj.beta_fs = repmat(exp(opt), obj.N, 1);                       % copy to each cell
+%             options = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-2);
+%             value = Inf;
+%             for start = 1:obj.settings.nstart                               % uniformly sample in log parameter space
+%                 logb0 = rand(1, obj.system.P) .* (log(obj.settings.ub) - log(obj.settings.lb)) + log(obj.settings.lb);
+%                 [opt_new, value_new] = fmincon(@(logb0) obj.squares_sum(exp(logb0)), logb0, [], [], [], [], ...
+%                                                log(obj.settings.lb), log(obj.settings.ub), [], options);
+%                 if value_new < value, value = value_new; opt = opt_new; end
+%             end
+%             obj.beta_fs = repmat(exp(opt), obj.N, 1);                       % copy to each cell
+            
+            beta_init = Optimization.initialize(@obj.squares_sum, obj.settings.lb, obj.settings.ub, obj.settings.nstart);
+            obj.beta_fs = repmat(beta_init, obj.N, 1);                       % copy to each cell
         end
             
 
@@ -137,8 +140,8 @@ classdef FirstStage < handle
                 else
                     initial = obj.beta_fs(i, :);
                 end                                                         % constrained GLS using quadratic programming
-                obj.beta_fs(i, :) = Optimizer.QPGLS(design, response, variances, initial, ...
-                                                    obj.settings.lb, obj.settings.ub, obj.settings.prior);
+                obj.beta_fs(i, :) = Optimization.QPGLS(design, response, variances, initial, ...
+                                                        obj.settings.lb, obj.settings.ub, obj.settings.prior);
             end
         end
         

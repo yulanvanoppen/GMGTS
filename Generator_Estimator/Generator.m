@@ -110,7 +110,7 @@ classdef Generator < handle
             errors = normrnd(0, obj.settings.error_std, size(obj.data.original));
             obj.data.traces = obj.data.original .* (1 + errors);            % multiplicative measurement noise
 
-            [measurements, ground_truth] = obj.separate(obj);
+            [measurements, ground_truth] = obj.separate();
         end
 
 

@@ -135,10 +135,10 @@ classdef Smoother < handle
                 design = [ones(obj.N * obj.T, 1) flatten(predicted).^2];    % columns for additive and multiplicative noise
                 response = (flatten(predicted) - flatten(obj.data.traces(:, k, :))).^2;
                 
-                coefficients = Optimizer.optimize(design, response);        % initialize nonzero LS estimates for noise parameters
+                coefficients = lsqnonneg(design, response);                 % initialize nonzero LS estimates for noise parameters
                 if sum(coefficients) == 0, coefficients(1) = mean(response); end
                                                                             % optimize further iteratively
-                coefficients = Optimizer.newton_raphson(coefficients, predicted, obj.data.traces(:, k, :));
+                coefficients = Optimization.noise_parameters(coefficients, predicted, obj.data.traces(:, k, :));
                 if sum(coefficients) == 0, coefficients(1) = mean(response); end
                 
                 obj.sigma(k) = coefficients(1);                             % store optimum and compute variances
