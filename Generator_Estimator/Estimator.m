@@ -38,9 +38,37 @@ classdef Estimator < handle
     
     methods
         %% Constructor -----------------------------------------------------
-        function obj = Estimator(data, system, varargin)
-            traces
-            if isfield(t)
+        function obj = Estimator(system, data, varargin)
+            if ~isa(system, 'ODEIQM'), system = ODEIQM(string(system)); end
+            if isstruct(data)
+                if ~isfield(data, 'traces') && isfield(data, 'y'), data.traces = data.y; end
+                if ~isfield(data, 't'), data.t = 0:size(data.traces, 1); end
+                if ~isfield(data, 'observed'), data.observed = 1:size(data.traces, 2); end
+                if ~isfield(data, 'init'), data.init = system.x0' + 1e-4; end
+            else
+                traces = data;
+                if ~iscellstr(varargin(1)) %#ok<ISCLSTR>
+                    t = sort(unique(reshape(varargin{1}, 1, [])));
+                    if ~iscellstr(varargin(2)) %#ok<ISCLSTR>
+                        observed = sort(unique(reshape(varargin{2}, 1, [])));
+                        if ~iscellstr(varargin(3)) %#ok<ISCLSTR>
+                            init = reshape(varargin{3}, 1, []);
+                        else
+                            init = 1e-4 * ones(1, system.K);
+                        end
+                    else
+                        observed = 1:size(traces, 2);
+                        init = 1e-4 * ones(1, system.K);
+                    end
+                else
+                    t = 0:size(traces, 1);
+                    observed = 1:size(traces, 2);
+                    init = 1e-4 * ones(1, system.K);
+                end
+                data = struct('traces', traces, 't', t, 'observed', observed, 'init', init);
+            end
+            [data.T, data.L, data.N] = size(data.traces);
+            
             
             default_Stages = 2;
             default_Methods = "GMGTS";
@@ -63,8 +91,11 @@ classdef Estimator < handle
             default_Prior = struct('mean', 0, 'prec', 0);
             
             parser = inputParser;
-            addRequired(parser, 'data', @isstruct);
-            addRequired(parser, 'system', @(x) isa(x, 'ODEIQM'));
+            addRequired(parser, 'system', @(x) isa(x, 'ODEIQM') || isstring(string(x)) && numel(string(x)) == 1);
+            addRequired(parser, 'data', @(x) isstruct(x) || isnumeric(x) && ndims(x) == 3 && size(x, 1) > 1);
+            addOptional(parser, 't', @(x) isnumeric(x) && numel(unique(x)) == size(data.traces, 1));
+            addOptional(parser, 'observed', @(x) isnumeric(x) && numel(unique(x)) == size(data.traces, 2));
+            addOptional(parser, 'init', @(x) isnumeric(x) && numel(x) == system.K);
             
             addParameter(parser, 'Stages', default_Stages, @(x) ismember(x, 0:2));
             addParameter(parser, 'Methods', default_Methods, ...
@@ -92,10 +123,39 @@ classdef Estimator < handle
                                                                && all(x.sd > 0) ...
                                                             || isfield(x, 'cv') && numel(x.cv) == system.P ...
                                                                && all(x.cv > 0)));
-            parse(parser, data, system, varargin{:});
+            parse(parser, system, data, varargin{:});
             
-            obj.data = parser.Results.data;
-            obj.system = parser.Results.system;
+            system = parser.Results.system;
+            if ~isa(system, 'ODEIQM'), system = ODEIQM(string(system)); end
+            obj.system = system;
+            
+            data = parser.Results.data;
+            if isstruct(data)
+                if ~isfield(data, 'traces') && isfield(data, 'y'), data.traces = data.y; end
+                if ~isfield(data, 't'), data.t = 0:size(data.traces, 1); end
+                if ~isfield(data, 'observed'), data.observed = 1:size(data.traces, 2); end
+                if ~isfield(data, 'init'), data.init = system.x0' + 1e-4; end
+            else
+                traces = data;
+                if iscellstr(varargin(1)) %#ok<ISCLSTR>
+                    t = 0:size(traces, 1);
+                else
+                    t = sort(unique(reshape(varargin{1}, 1, [])));
+                end
+                if iscellstr(varargin(2)) %#ok<ISCLSTR>
+                    observed = 1:size(traces, 2);
+                else
+                    observed = sort(unique(reshape(varargin{2}, 1, [])));
+                end
+                if iscellstr(varargin(3)) %#ok<ISCLSTR>
+                    init = 1e-4 * ones(1, system.K);
+                else
+                    init = reshape(varargin{3}, 1, []);
+                end
+                data = struct('traces', traces, 't', t, 'observed', observed, 'init', init);
+            end
+            [data.T, data.L, data.N] = size(data.traces);
+            obj.data = data;
             
             obj.stages = parser.Results.Stages;
             obj.method = string(parser.Results.Methods);

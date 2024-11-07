@@ -165,7 +165,7 @@ classdef ODEIQM < handle
             
             
             %% process model file
-            contents = fileread(mode_file);                                 % extract system name manually
+            contents = fileread(model_file);                                 % extract system name manually
             token = regexp(contents, '\*\*\*\*\*\*\*\*\*\* MODEL NAME\s*([^\n]+)\s*\*\*\*\*\*\*\*\*\*\* MODEL NOTES', 'tokens');
             obj.name = strtrim(token{1}{1});
             

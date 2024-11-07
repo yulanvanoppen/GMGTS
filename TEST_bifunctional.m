@@ -41,7 +41,7 @@ methods = [];
 methods = [methods "GMGTS"];
 % methods = [methods "GTS"];
 
-estimator = Estimator(data, system ...                                      % estimator setup
+estimator = Estimator(system, data ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
                       , 'InteractiveSmoothing', true ...
