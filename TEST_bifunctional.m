@@ -3,10 +3,10 @@
 clearvars
 close all
 
-% model =  'model_bifunctional.txt';
-% system = ODEIQM(model , 'FixedParameters', ["k1" "k2" "k4" "k6"]);
-% 
-% save('system_bifunctional_measurable.mat', 'system')
+model =  'model_bifunctional.txt';
+system = ODEIQM(model , 'FixedParameters', ["k1" "k2" "k4" "k6"]);
+
+save('system_bifunctional_measurable.mat', 'system')
 
 load('system_bifunctional_measurable.mat')
 
@@ -21,18 +21,11 @@ generator = Generator(system ...                                            % ge
                       , 'error_std', noise_level ...                        % std of lognormal multiplicative errors
                       , 'D_mult', .25 ...                                   % variance scale
                       , 'observed', first_obs:system.K ...                                 % observed states labels (or indices)
-                      , 'varying', 1:system.P ...                           % variable parameter labels (or indices)
                       );
 
 rng(seed);
-generator.generate();                                                       % generate data and package
-% plot(generator);
-
-generated = generator.data;
-[data, ground_truth] = obfuscate(generated);
-data.beta = ground_truth.beta;
-
-knots = placement(data)
+[data, ground_truth] = generator.generate();
+% plot(generator)
 
 
 %% Estimate ----------------------------------------------------------------
@@ -44,7 +37,6 @@ methods = [methods "GMGTS"];
 estimator = Estimator(system, data ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'InteractiveSmoothing', true ...
                       );
 
 estimator.estimate();

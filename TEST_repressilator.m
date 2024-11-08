@@ -3,10 +3,10 @@
 clearvars
 close all
 
-% model =  'model_repressilator_full.txt';
-% system = ODEIQM(model, 'FixedParameters', ["DNAT" "kf" "Kd" "m1" "p1"]);
-% 
-% save('system_repressilator.mat', 'system')
+model =  'model_repressilator_full.txt';
+system = ODEIQM(model, 'FixedParameters', ["DNAT" "kf" "Kd" "m1" "p1"]);
+
+save('system_repressilator.mat', 'system')
 
 load('system_repressilator.mat')
 
@@ -22,16 +22,11 @@ generator = Generator(system ...                                            % ge
                       , 'error_std', .05 ...                               % std of lognormal multiplicative errors
                       , 'D', D ...                                   % variance scale
                       , 'observed', observed ...             % observed states labels (or indices)
-                      , 'varying', 1:system.P ...                           % variable parameter labels (or indices)
                       );
 
 rng(seed);
-generator.generate();                                                       % generate data and package
-% plot(generator);
-
-generated = generator.data;
-[data, ground_truth] = obfuscate(generated);
-data.beta = ground_truth.beta;
+[data, ground_truth] = generator.generate();
+% plot(generator)
 
 
 %% Estimate ----------------------------------------------------------------
@@ -41,9 +36,8 @@ methods = [methods "GMGTS"];
 % methods = [methods "GTS"];
 
 estimator = Estimator(system, data ...                                      % estimator setup
-                      , 'Stages', 0 ...                                     % 0: smoothing only, 1: first stage only
+                      , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'InteractiveSmoothing', true ...
                       );
 
 estimator.estimate();
