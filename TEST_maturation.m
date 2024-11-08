@@ -3,10 +3,10 @@
 clearvars
 close all
 
-% model =  'model_maturation_onestep.txt';
-% system = ODEIQM(model, 'FixedParameters', ["kr" "kdr" "kdil" "d"]);
-% 
-% save('system_maturation_delay.mat', 'system')
+model =  'model_maturation_onestep.txt';
+system = ODEIQM(model, 'FixedParameters', ["kr" "kdr" "kdil" "d"]);
+
+save('system_maturation_delay.mat', 'system')
 
 load('system_maturation_delay.mat')
 

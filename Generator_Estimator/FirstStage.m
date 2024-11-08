@@ -126,7 +126,7 @@ classdef FirstStage < handle
         function update_parameters(obj, iter)                           % Update (cell-specific) parameter estimates
             for i = obj.not_converged                                       % model slopes from splines and integrations
                 design = obj.system.g(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
-                const = obj.system.const(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
+                const = obj.system.h(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
                 response = obj.dsmoothed_fitted(2:end-1, :, i) - const;     % spline and integration slopes
     
                                                                             % disregard interval ends
@@ -250,8 +250,8 @@ classdef FirstStage < handle
             if rep > 1                                                      % compute g(.), h(.), and their Jacobians for each cell
                 g_all = obj.system.g(obj.data.smoothed, obj.data.t);
                 dg_all = obj.system.dg(obj.data.smoothed, obj.data.t);
-                const_all = obj.system.const(obj.data.smoothed, obj.data.t);
-                dconst_all = obj.system.dconst(obj.data.smoothed, obj.data.t);
+                h_all = obj.system.h(obj.data.smoothed, obj.data.t);
+                dh_all = obj.system.dh(obj.data.smoothed, obj.data.t);
             end
             
             for i = 1:obj.N                                                 % estimated measurement error variances
@@ -260,7 +260,7 @@ classdef FirstStage < handle
                 var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
                 
                 dX = reshape(obj.data.dsmoothed(indices_t, :, i), [], 1);   % left-hand side
-                H = reshape(const_all(indices_t, :, i), [], 1);             % constant part wrt parameters
+                H = reshape(h_all(indices_t, :, i), [], 1);             % constant part wrt parameters
                 G = g_all(indices_tk, :, i);                                % linear part wrt parameters
 
                 Vinv = zeros(obj.system.K * obj.T);                         % inverse residual covariance matrix estimate
@@ -282,7 +282,7 @@ classdef FirstStage < handle
                         Vinv_j = Vinv(j + obj.T*(0:obj.system.K-1), indices_tk);
 
                         Pi(:, j, k) = (dg_dxk' * Vinv_j * G + G' * Vinv_j' * dg_dxk) * Thinv_Xi;
-                        Psi(:, j, k) = dg_dxk' * Vinv_j * (dX-H) - G' * Vinv_j' * dconst_all(j + obj.T*(0:obj.system.K-1), k, i);
+                        Psi(:, j, k) = dg_dxk' * Vinv_j * (dX-H) - G' * Vinv_j' * dh_all(j + obj.T*(0:obj.system.K-1), k, i);
                     end
                 end                                                         % partial with respect to X
                 dbeta_dX = Thinv * reshape(Psi(:, indices_t, :) - Pi(:, indices_t, :), obj.system.P, []);
@@ -313,8 +313,8 @@ classdef FirstStage < handle
                 g_all = obj.system.g(obj.smoothed_fitted, obj.data.t);
                 dg_all = zeros(obj.system.K, obj.system.P, obj.T, obj.system.K, obj.N);
                 dg_all(:, :, :, :, cells) = obj.system.dg(obj.smoothed_fitted(:, :, cells), obj.data.t);
-                const_all = obj.system.const(obj.smoothed_fitted, obj.data.t);
-                dconst_all = obj.system.dconst(obj.smoothed_fitted, obj.data.t);
+                h_all = obj.system.h(obj.smoothed_fitted, obj.data.t);
+                dh_all = obj.system.dh(obj.smoothed_fitted, obj.data.t);
             end
                                                                             % RHS Jacobian for each cell from smoothed measurements
             df_dX_all = obj.system.df(obj.smoothed_fitted, obj.data.t, obj.beta_fs);
@@ -360,7 +360,7 @@ classdef FirstStage < handle
                 else
                                                                             % left-hand side
                     dX = reshape(obj.dsmoothed_fitted(indices_t, :, i), [], 1);
-                    H = reshape(const_all(indices_t, :, i), [], 1);         % constant part wrt parameters
+                    H = reshape(h_all(indices_t, :, i), [], 1);            % constant part wrt parameters
                     G = g_all(indices_tk, :, i);                            % linear part wrt parameters
                     
                     Vinv = zeros(obj.system.K * obj.T);                     % inverse residual covariance matrix estimate
@@ -382,7 +382,7 @@ classdef FirstStage < handle
                             Vinv_j = Vinv(j + obj.T*(0:obj.system.K-1), indices_tk);
 
                             Pi(:, j, k) = (dg_dxk' * Vinv_j * G + G' * Vinv_j' * dg_dxk) * Thinv_Xi;
-                            Psi(:, j, k) = dg_dxk' * Vinv_j * (dX-H) - G' * Vinv_j' * dconst_all(j + obj.T*(0:obj.system.K-1), k, i);
+                            Psi(:, j, k) = dg_dxk' * Vinv_j * (dX-H) - G' * Vinv_j' * dh_all(j + obj.T*(0:obj.system.K-1), k, i);
                         end
                     end                                                     % partial with respect to X
                     dbeta_dX = Thinv * reshape(Psi(:, indices_t, :) - Pi(:, indices_t, :), obj.system.P, []);

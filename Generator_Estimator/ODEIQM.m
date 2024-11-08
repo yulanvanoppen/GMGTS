@@ -1,11 +1,11 @@
 classdef ODEIQM < handle
     properties (Access = private)
         df_cell                                                             % raw jacobian handle
-        g_cell                                                              % rhs: f(x; p) = g(x) p
-        dg_cell                                                             % d/dx of rhs
-        const_handle                                                               % constant part of rhs
-        dconst_cell                                                            % constant part gradient
-        dfdx_handle
+        g_cell                                                              % RHS: f(x; p) = g(x)⋅k + h(x)
+        dg_cell                                                             % d/dx of RHS
+        h_handle                                                            % constant part of RHS
+        dh_cell                                                             % constant part gradient
+        dfdx_handle                                                         % RHS Jacobian
         model                                                               % IQMtools model
         MEX                                                                 % MEX model name
         MEXf                                                                % MEX function
@@ -27,71 +27,73 @@ classdef ODEIQM < handle
         fixed                                                               % fixed parameter names and values
     end
     
+    
     methods
         function obj = ODEIQM(model_file, varargin)                     % Constructor
-            parser = inputParser();
+            parser = inputParser();                                         
             addRequired(parser, 'model_file', @(x) (ischar(x) || isstring(x)) ...
                                                    && endsWith(x, '.txt') );
-            addParameter(parser, 'FixedParameters', string([]), @isstring);
+            addParameter(parser, 'FixedParameters', string([]), @isstring); 
             addParameter(parser, 'FixedValues', [], @isnumeric);
             parse(parser, model_file, varargin{:});
             
-            assert(isempty(parser.Results.FixedValues) || ...
+            assert(isempty(parser.Results.FixedValues) || ...               % equal number of labels and constraints
                    numel(parser.Results.FixedParameters) == numel(parser.Results.FixedValues))
             
-            obj.fixed = struct('names', parser.Results.FixedParameters, ...
+            obj.fixed = struct('names', parser.Results.FixedParameters, ... % store IDs and fixed values
                                'values', parser.Results.FixedValues);
-            obj.process(model_file);
+            obj.process(model_file);                                        % extract relevant functions using IQMmodel
         end
         
         
-        function traces = integrate(obj, parameters, settings, t, tol)       % Numerically integrate ODE system
+        function traces = integrate(obj, parameters, settings, t, tol)  % Numerically integrate ODE system
             if nargin < 4, t = settings.t; end
             if nargin < 5, tol = 1e-6; end
             options = struct('reltol', tol);
             
-            nseries = size(parameters, 1);
+            nseries = size(parameters, 1);                                  % number of replicates to integrate
             
             if size(settings.init, 1) == 1
-                settings.init = repmat(settings.init, nseries, 1);       % replicate if necessary
+                settings.init = repmat(settings.init, nseries, 1);          % replicate if necessary
             end
             
-            full_parameters = zeros(1, length(obj.parameters));
+            full_parameters = zeros(1, length(obj.parameters));             % substitute fixed parameter values
             full_parameters(obj.fixed_indices) = obj.fixed.values;
-            traces = zeros(length(t), obj.K, nseries);             % initialize trajectories
-            for cell = 1:nseries
+            
+            traces = zeros(length(t), obj.K, nseries);
+            for cell = 1:nseries                                            % substitute cell-specific parameters
                 full_parameters(~ismember(1:length(obj.parameters), obj.fixed_indices)) = parameters(cell, :);
-                out = obj.MEXf(t, settings.init(cell, :), ...               % integrate using MEXmodel
+                out = obj.MEXf(t, settings.init(cell, :), ...               % fast integration using MEXmodel
                                full_parameters, options);
                 traces(:, :, cell) = out.statevalues;                       % save integrated states
             end
         end
         
         
-        function f = rhs(obj, states, times, parameters)                       % RHS constructed from g()                          
+        function f = rhs(obj, states, times, parameters)                % RHS constructed from g()                          
             if nargin < 4, parameters = times; times = zeros(1, size(states, 1)); end
             par_reshaped = reshape(parameters', obj.P, 1, []);              % organize into pages
-            f_reshaped = pagemtimes(obj.g(states, times), par_reshaped);           % multiply matrices page-wise
-            f = reshape(f_reshaped, size(states)) + obj.const(states, times);      % return right-hand side
+            f_reshaped = pagemtimes(obj.g(states, times), par_reshaped);    % multiply matrices page-wise
+            f = reshape(f_reshaped, size(states)) + obj.h(states, times);   % return right-hand side
         end
         
         
-        function S = sensitivity(obj, parameters, settings, t, tol)
+        function S = sensitivity(obj, parameters, settings, t, tol)     % Solve sensitivity equations
             if nargin < 4, t = settings.t; end
             if nargin < 5, tol = 1e-6; end
             options = struct('reltol', tol);
             
-            nseries = size(parameters, 1);
+            nseries = size(parameters, 1);                                  % number of replicates to integrate
             
             if size(settings.init, 1) == 1
-                settings.init = repmat(settings.init, nseries, 1);       % replicate if necessary
+                settings.init = repmat(settings.init, nseries, 1);          % replicate if necessary
             end
             
-            full_parameters = zeros(1, length(obj.parameters));
+            full_parameters = zeros(1, length(obj.parameters));             % substitute fixed values
             full_parameters(obj.fixed_indices) = obj.fixed.values;
             
             S = zeros(length(t), obj.K, obj.P, nseries);
-            for cell = 1:nseries
+            for cell = 1:nseries                                            % substitute cell-specific parameters
                 full_parameters(~ismember(1:length(obj.parameters), obj.fixed_indices)) = parameters(cell, :);
                 out = IQMsensitivity(obj.MEX, t, cellstr(obj.parameters_variable'), [], options, full_parameters, settings.init(cell, :));
                 S(:, :, :, cell) = reshape([out.paramtrajectories.states{:}], [], obj.K, obj.P);
@@ -110,16 +112,6 @@ classdef ODEIQM < handle
             result = vertcat(result{:});
         end
         
-        
-        function result = dfdx(obj, states, dstates, times, parameters)
-            assert(size(states, 2) == obj.K)
-            assert(size(dstates, 2) == obj.K)
-            assert(size(states, 1) == numel(times))
-            assert(size(parameters, 2) == obj.P)
-            result = obj.dfdx_handle(states, dstates, times, parameters);
-%             result = reshape(permute(result, [2 1 3]), obj.P, [], obj.K, size(result, 3));
-%             result = permute(result, [2 3 1 4]);
-        end
         
         function result = g(obj, states, times)
             assert(size(states, 2) == obj.K)
@@ -143,33 +135,27 @@ classdef ODEIQM < handle
         end
         
         
-        function result = const(obj, states, times)
+        function result = h(obj, states, times)
             assert(size(states, 2) == obj.K)
             assert(size(states, 1) == numel(times))
-            result = obj.const_handle(states, times);
+            result = obj.h_handle(states, times);
         end
         
         
-        function result = dconst(obj, states, times)
+        function result = dh(obj, states, times)
             assert(size(states, 2) == obj.K)
             assert(size(states, 1) == numel(times))
             result = cell(obj.K, 1);
             for k = 1:obj.K
-                result{k} = obj.dconst_cell{k}(states, times);
+                result{k} = obj.dh_cell{k}(states, times);
             end
             result = horzcat(result{:});
         end
         
         
-        
-        
-        function process(obj, model_file)
-            tic
-            
-            
-            %% process model file
-            contents = fileread(model_file);                                 % extract system name manually
-            token = regexp(contents, '\*\*\*\*\*\*\*\*\*\* MODEL NAME\s*([^\n]+)\s*\*\*\*\*\*\*\*\*\*\* MODEL NOTES', 'tokens');
+        function process(obj, model_file)                               % Process model file
+            contents = fileread(model_file);                                % regex to extract system name
+            token = regexp(contents, '\* MODEL NAME\s*([^\n]+)\s*\*', 'tokens');
             obj.name = strtrim(token{1}{1});
             
             installIQMtools;
@@ -185,15 +171,19 @@ classdef ODEIQM < handle
             [~, obj.fixed_indices] = ismember(obj.fixed.names, obj.parameters);
             obj.fixed_indices = obj.fixed_indices(obj.fixed_indices ~= 0);
             
-            %% setup symbolic function
+            [f, t, x, beta] = obj.construct_symbolic(f);
+            obj.construct_linear_decomposition(f, t, x, beta);
+            obj.construct_rhs_jacobian(f, t, x, beta);
+        end
+        
+        
+        function [f, t, x, beta] = construct_symbolic(obj, f)           % Setup symbolic function
             obj.K = length(obj.states);
             t = sym('t', 'real');
             x = sym('x', [obj.K, 1], 'real');
-            dx = sym('dx', [obj.K, 1], 'real');
-%             f = subs(str2sym(f), cellstr(obj.states'), x');
             f = subs(str2sym(f), [cellstr(obj.states') {'time'}], [x' t]);
             
-            intersection = ismember(obj.fixed.names, obj.parameters);
+            intersection = ismember(obj.fixed.names, obj.parameters);       % substitute fixed parameters
             obj.fixed.names = obj.fixed.names(intersection);
             if ~isempty(obj.fixed.values)
                 obj.fixed.values = obj.fixed.values(intersection);
@@ -203,37 +193,39 @@ classdef ODEIQM < handle
             end
             f = subs(f, cellstr(obj.fixed.names), obj.fixed.values);
             
-            variable_elements = ~ismember(obj.parameters, obj.fixed.names);
+            variable_elements = ~ismember(obj.parameters, obj.fixed.names); % separate remaining parameters
             obj.parameters_variable = obj.parameters(variable_elements);
             obj.k0 = obj.k0(variable_elements);
             obj.P = sum(variable_elements);
             beta = sym('beta', [obj.P, 1], 'real');
             f = subs(f, cellstr(obj.parameters_variable'), beta');
+        end
+        
+        
+        function construct_linear_decomposition(obj, f, t, x, beta)     % Extract RHS decomposition g(x)⋅k+h(x)
+            h_symb = subs(f, beta, zeros(obj.P, 1));
             
-            %% linear part
-            const_beta = subs(f, beta, zeros(obj.P, 1))
-            
-            g_symb = sym('g_symb', [obj.K, obj.P], 'real');
+            g_symb = sym('g_symb', [obj.K, obj.P], 'real');                 % separate h(x) from f(x)
             for p = 1:obj.P
-                g_symb(:, p) = subs(f, beta, 1*(p == 1:obj.P)') - const_beta;
+                g_symb(:, p) = subs(f, beta, 1*(p == 1:obj.P)') - h_symb;
             end
             for n = 1:numel(g_symb)
-                if hasSymType(g_symb(n), 'constant') && g_symb(n) == 0
+                if hasSymType(g_symb(n), 'constant') && g_symb(n) == 0      % fix for zero entries
                     g_symb(n) = 1e-16*x(1);
-                elseif ~hasSymType(g_symb(n), 'variable') && g_symb(n) ~= 0
+                elseif ~hasSymType(g_symb(n), 'variable') && g_symb(n) ~= 0 % fix for constant entries
                     g_symb(n) = subs(g_symb(n)) + 1e-16*x(1);
                 end
             end
             
-            for l = 1:obj.K
-                g = matlabFunction(g_symb(l, :), 'Vars', [x; t]);
-                g = @(states, times) g(states{:}, times{:});
+            for l = 1:obj.K                                                 
+                g = matlabFunction(g_symb(l, :), 'Vars', [x; t]);           % create vectorized matlabFunction
+                g = @(states, times) g(states{:}, times{:});                % store for each state separately 
                 obj.g_cell{l} = @(states, times) g(mat2cell(states, size(states, 1), ...
                                                             ones(1, obj.K), size(states, 3)), ...
                                                    mat2cell(repmat(reshape(times, [], 1), 1, 1, size(states, 3)), ...
                                                             numel(times), 1, size(states, 3)));
                 
-                dg = jacobian(reshape(g_symb, [], 1), x(l));
+                dg = jacobian(reshape(g_symb, [], 1), x(l));                % create vectorized Jacobian as with g
                 dg_vectorized = dg;
                 for n = 1:numel(dg_vectorized)
                     if dg_vectorized(n) == 0
@@ -243,53 +235,53 @@ classdef ODEIQM < handle
                     end
                 end
                 dg = matlabFunction(dg_vectorized, 'Vars', [x; t]);
-                dg = @(states, times) dg(states{:}, times{:});
+                dg = @(states, times) dg(states{:}, times{:});              % elaborate restructuring
                 dg = @(states, times) dg(mat2cell(permute(reshape(permute(states, [2 1 3]), ...
-                                                           obj.K, 1, size(states, 1), ...
-                                                           size(states, 3)), [2 1 3 4]), ...
-                                           1, ones(1, obj.K), size(states, 1), size(states, 3)), ...
+                                                                  obj.K, 1, size(states, 1), ...
+                                                                  size(states, 3)), [2 1 3 4]), ...
+                                                  1, ones(1, obj.K), size(states, 1), size(states, 3)), ...
                                          mat2cell(repmat(reshape(times, 1, 1, []), 1, 1, 1, size(states, 3)), ...
-                                                            1, 1, numel(times), size(states, 3)));
+                                                  1, 1, numel(times), size(states, 3)));
                 obj.dg_cell{l} = @(states, times) reshape(dg(states, times), obj.K, obj.P, ...
                                                           size(states, 1), size(states, 3));
                                                       
-                dconst_beta = jacobian(const_beta, x(l));
-                dconst_vectorized = dconst_beta;
-                for n = 1:numel(dconst_vectorized)
-                    if dconst_vectorized(n) == 0
-                        dconst_vectorized(n) = 1e-16*x(1);
-                    elseif ~hasSymType(dconst_vectorized(n), 'variable') && dconst_vectorized(n) ~= 0
-                        dconst_vectorized(n) = subs(dconst_vectorized(n)) + 1e-16*x(1);
+                dh_symb = jacobian(h_symb, x(l));                           % create vectorized Jacobian of h similarly
+                dh_vectorized = dh_symb;
+                for n = 1:numel(dh_vectorized)
+                    if dh_vectorized(n) == 0
+                        dh_vectorized(n) = 1e-16*x(1);
+                    elseif ~hasSymType(dh_vectorized(n), 'variable') && dh_vectorized(n) ~= 0
+                        dh_vectorized(n) = subs(dh_vectorized(n)) + 1e-16*x(1);
                     end
                 end
-                dconst_beta = matlabFunction(dconst_vectorized, 'Vars', [x; t]);
-                dconst_beta = @(states, times) dconst_beta(states{:}, times{:});
-                obj.dconst_cell{l} = @(states, times) dconst_beta(mat2cell(states, size(states, 1), ...
-                                                                           ones(1, obj.K), size(states, 3)), ...
-                                                                  mat2cell(repmat(reshape(times, [], 1), 1, 1, size(states, 3)), ...
-                                                                           numel(times), 1, size(states, 3)));
+                dh_symb = matlabFunction(dh_vectorized, 'Vars', [x; t]);
+                dh_symb = @(states, times) dh_symb(states{:}, times{:});
+                obj.dh_cell{l} = @(states, times) dh_symb(mat2cell(states, size(states, 1), ...
+                                                                   ones(1, obj.K), size(states, 3)), ...
+                                                          mat2cell(repmat(reshape(times, [], 1), 1, 1, size(states, 3)), ...
+                                                                   numel(times), 1, size(states, 3)));
             end
             
-            
-            
-            for n = 1:numel(const_beta)
-                if hasSymType(const_beta(n), 'constant') && const_beta(n) == 0
-                    const_beta(n) = 1e-16*x(1);
-                elseif ~hasSymType(const_beta(n), 'variable') && const_beta(n) ~= 0
-                    const_beta(n) = subs(const_beta(n)) + 1e-16*x(1);
+            for n = 1:numel(h_symb)                                         % fix zero and constant entries
+                if hasSymType(h_symb(n), 'constant') && h_symb(n) == 0
+                    h_symb(n) = 1e-16*x(1);
+                elseif ~hasSymType(h_symb(n), 'variable') && h_symb(n) ~= 0
+                    h_symb(n) = subs(h_symb(n)) + 1e-16*x(1);
                 end
             end
             
-            const_beta = matlabFunction(permute(const_beta, [2 1]), 'Vars', [x; t]);
-            const_beta = @(states, times) const_beta(states{:}, times{:});
-            obj.const_handle = @(states, times) const_beta(mat2cell(states, size(states, 1), ...
-                                                                    ones(1, obj.K), size(states, 3)), ...
-                                                           mat2cell(repmat(reshape(times, [], 1), 1, 1, size(states, 3)), ...
-                                                                    numel(times), 1, size(states, 3)));
-            
-            %% RHS derivatives
-            df_symb = jacobian(f, x)
-            for n = 1:numel(df_symb)
+            h_symb = matlabFunction(permute(h_symb, [2 1]), 'Vars', [x; t]);% vectorize analogously
+            h_symb = @(states, times) h_symb(states{:}, times{:});
+            obj.h_handle = @(states, times) h_symb(mat2cell(states, size(states, 1), ...
+                                                            ones(1, obj.K), size(states, 3)), ...
+                                                   mat2cell(repmat(reshape(times, [], 1), 1, 1, size(states, 3)), ...
+                                                            numel(times), 1, size(states, 3)));
+        end
+        
+        
+        function construct_rhs_jacobian(obj, f, t, x, beta)             % RHS state derivatives
+            df_symb = jacobian(f, x);                                       % RHS Jacobian
+            for n = 1:numel(df_symb)                                        % fix zero and constant entries
                 if hasSymType(df_symb(n), 'constant') && df_symb(n) == 0
                     df_symb(n) = 1e-16*x(1);
                 elseif ~hasSymType(df_symb(n), 'variable') && df_symb(n) ~= 0
@@ -297,7 +289,7 @@ classdef ODEIQM < handle
                 end
             end
             for l = 1:obj.K
-                df = matlabFunction(df_symb(l, :), 'Vars', [x; t; beta]);
+                df = matlabFunction(df_symb(l, :), 'Vars', [x; t; beta]);   % vectorized matlabFunction
                 df = @(states, times, parameters) df(states{:}, times{:}, parameters{:});
                 obj.df_cell{l} = @(states, times, parameters) ...
                     df(mat2cell(states, size(states, 1), ...
@@ -307,29 +299,6 @@ classdef ODEIQM < handle
                        mat2cell(repmat(permute(parameters, [3 2 1]), size(states, 1), 1, 1), ...
                                 size(states, 1), ones(1, obj.P), size(parameters, 1)));
             end
-            
-            dfxdot = (jacobian(f, x) * dx)';
-            dfxdot_vectorized = dfxdot;
-            for n = 1:numel(dfxdot_vectorized)
-                if dfxdot_vectorized(n) == 0
-                    dfxdot_vectorized(n) = 1e-16*dx(1);
-                elseif ~hasSymType(dfxdot_vectorized(n), 'variable') && dfxdot_vectorized(n) ~= 0
-                    dfxdot_vectorized(n) = subs(dfxdot_vectorized(n)) + 1e-16*dx(1);
-                end
-            end
-            dfxdot = matlabFunction(dfxdot_vectorized, 'Vars', [x; dx; t; beta]);
-            dfxdot = @(states, dstates, times, parameters) dfxdot(states{:}, dstates{:}, times{:}, parameters{:});
-            obj.dfdx_handle = @(states, dstates, times, parameters) ...
-                permute(dfxdot(mat2cell(repmat(reshape(states, size(states, 1), size(states, 2), 1, size(states, 3)), ...
-                                               1, 1, size(dstates, 3), 1), ...
-                                        size(states, 1), ones(1, obj.K), size(dstates, 3), size(states, 3)), ...
-                               mat2cell(dstates, size(dstates, 1), ones(1, obj.K), size(dstates, 3), size(dstates, 4)), ...
-                               mat2cell(repmat(reshape(times, [], 1), 1, 1, size(dstates, 3), size(states, 3)), ...
-                                        numel(times), 1, size(dstates, 3), size(states, 3)), ...
-                               mat2cell(repmat(permute(parameters, [3 2 4 1]), size(states, 1), 1, size(dstates, 3), 1), ...
-                                        size(states, 1), ones(1, obj.P), size(dstates, 3), size(parameters, 1))), [1 2 3 4]);
-            
-            toc_converting = toc
         end
     end
 end
