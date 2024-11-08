@@ -21,6 +21,7 @@ classdef Estimator < handle
         niterSS                                                             % #iterations for the second stage 
         tolSS                                                               % convergence tolerance for the second stage
         
+        testconv                                                            % pipeline to approximate FS basins of attraction
         lognormal                                                           % whether to infer lognormal RE distribution
         prior                                                               % parameter prior distribution
         
@@ -28,6 +29,7 @@ classdef Estimator < handle
         GMGTS_smoother                                                      % GMGTS smoothing object
         GMGTS_first_stage                                                   % GMGTS first stage optimization object
         GMGTS_second_stage                                                  % GMGTS second stage inference object
+        GMGTS_conv_test                                                     % GMGTS basin of attraction approximator
         results_GMGTS                                                       % collect GMGTS results
         
         GTS_settings                                                        % GTS settings struct
@@ -67,8 +69,9 @@ classdef Estimator < handle
             default_MaxIterationsSS = 10;
             default_ConvergenceTolSS = 1e-2;
             
-            default_Prior = struct('mean', 0, 'prec', 0);
+            default_TestConvergence = false;
             default_LogNormal = false;
+            default_Prior = struct('mean', 0, 'prec', 0);
             
             parser = inputParser;
             addRequired(parser, 'system', @(x) isa(x, 'ODEIQM') || isstring(string(x)) && numel(string(x)) == 1);
@@ -98,6 +101,7 @@ classdef Estimator < handle
             addParameter(parser, 'MaxIterationsSS', default_MaxIterationsSS, @isscalar);
             addParameter(parser, 'ConvergenceTolSS', default_ConvergenceTolSS, @isscalar);
             
+            addParameter(parser, 'TestConvergence', default_TestConvergence, @islogical);
             addParameter(parser, 'LogNormal', default_LogNormal, @islogical)
             addParameter(parser, 'Prior', default_Prior, @(x) isfield(x, 'mean') && numel(x.mean) == system.P ...
                                                            && (isfield(x, 'prec') && all(size(x.prec) == system.P) ...
@@ -179,6 +183,7 @@ classdef Estimator < handle
             obj.niterSS = max(1, round(parser.Results.MaxIterationsSS));
             obj.tolSS = max(1e-12, parser.Results.ConvergenceTolSS);
             
+            obj.testconv = parser.Results.TestConvergence;
             obj.lognormal = parser.Results.LogNormal;
             obj.prior = parser.Results.Prior;
             obj.prior.mean = reshape(obj.prior.mean, [], 1);
@@ -256,6 +261,11 @@ classdef Estimator < handle
             end
             
             obj.results_GMGTS.time = [toc_sm_GMGTS toc_fs_GMGTS toc_ss_GMGTS];
+            
+            if obj.testconv
+                obj.GMGTS_conv_test = ConvTest(obj.results_GMGTS, obj.system, obj.GMGTS_settings.fs);
+                obj.results_GMGTS = obj.GMGTS_conv_test.estimate();
+            end
         end
         
         

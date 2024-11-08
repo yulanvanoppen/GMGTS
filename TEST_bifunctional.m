@@ -37,7 +37,8 @@ methods = [methods "GMGTS"];
 estimator = Estimator(system, data ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      );
+                      , 'LogNormal', true ...
+                  );
 
 estimator.estimate();
 
