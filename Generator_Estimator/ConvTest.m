@@ -45,7 +45,7 @@ classdef ConvTest < handle
             proposal_mu = obj.data.b_est;
             proposal_Sigma = obj.data.D_est*4;
             
-            sample_size = 100;
+            sample_size = 1000;
             n_funeval = 3;
 
             sample = max(1e-8, mvnrnd(proposal_mu, proposal_Sigma, sample_size));
@@ -67,15 +67,40 @@ classdef ConvTest < handle
             end
 
             Lipschitz_constants = zeros(sample_size, sample_size, n_funeval, obj.N);
+            divergence = cell(n_funeval, obj.N);
             for i = 1:obj.N
                 for iter = 1:n_funeval
+                    divergence{iter, i} = zeros(0, obj.system.P);
                     for row = 1:sample_size
                         for col = 1:sample_size
                             Lipschitz_constants(row, col, iter, i) = ...
                                 norm(f_sample(row, :, iter, i) - f_sample(col, :, iter, i)) ...
                                 ./ norm(sample(row, :) - sample(col, :));
+                            if Lipschitz_constants(row, col, iter, i) > 1
+                                divergence{iter, i} = [divergence{iter, i};
+                                                       (sample(row, :) + sample(col, :))/2]; %#ok<AGROW>
+                            end
                         end
                     end
+                end
+            end
+            
+            figure
+            tiledlayout(3, 4)
+            for i = 1:4
+                for iter = 1:3
+                    nexttile(i + (iter-1)*4)
+                    scatter(divergence{iter, i}(:, 1), divergence{iter, i}(:, 2), ...
+                            'filled', MarkerFaceAlpha=.01, MarkerEdgeAlpha=.01)
+                    hold on
+                    scatter(obj.beta_fs(:, 1), obj.beta_fs(:, 2))
+                    plot(obj.beta_fs(i, 1), obj.beta_fs(i, 2), '.', 'MarkerSize', 25)
+                    subtitle = 'g(⋅)';
+                    if iter > 1, subtitle = ['g(' subtitle ')']; end
+                    if iter > 2, subtitle = ['g(' subtitle ')']; end
+                    title(sprintf('Cell %d, %s', i, subtitle))
+                    xlabel('kp')
+                    ylabel('km')
                 end
             end
 
@@ -118,7 +143,7 @@ classdef ConvTest < handle
             
         
         function update_parameters(obj, iter)                           % Update (cell-specific) parameter estimates
-            for i = obj.N                                                   % model slopes from splines and integrations
+            for i = 1:obj.N                                                 % model slopes from splines and integrations
                 design = obj.system.g(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
                 const = obj.system.h(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
                 response = obj.dsmoothed_fitted(2:end-1, :, i) - const;     % spline and integration slopes
