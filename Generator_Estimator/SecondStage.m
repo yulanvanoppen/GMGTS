@@ -101,6 +101,7 @@ classdef SecondStage < handle
                 obj.data.population = obj.system.integrate(obj.data.b_est, obj.data, obj.data.t_fine);
             end
             obj.data.D_est = obj.D(:, :, end);                              % random effect covariance
+            obj.data.lognormal = obj.settings.lognormal;
                                                                             % fitted trajectories for empirical Bayes estimators
             obj.data.fitted2 = obj.system.integrate(obj.data.beta_ss, obj.data, obj.data.t_fine);
         end

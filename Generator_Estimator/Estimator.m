@@ -600,8 +600,8 @@ classdef Estimator < handle
                                         plot_settings, legends, '-.')
             end
             if ~isempty(fieldnames(truth))
-                population = obj.system.integrate(truth.b, obj.data);
-                obj.add_population_plot(obj.data.t, population, 'truth', ...
+%                 population = obj.system.integrate(truth.b, obj.data);
+                obj.add_population_plot(obj.data.t, truth.moriginal, 'truth', ...
                                         truth.original, '90\% CI (true)', ...
                                         plot_settings, legends, '--')
             end
@@ -677,6 +677,7 @@ classdef Estimator < handle
                 obj.add_mixed_effects(obj.results_GMGTS.beta_fs(:, ind), ...
                                       obj.results_GMGTS.b_est(ind), ...
                                       obj.results_GMGTS.D_est(ind, ind), ...
+                                      obj.results_GMGTS.lognormal, ...
                                       labels_ondiag_GMGTS, labels_offdiag_GMGTS, ...
                                       plot_settings, legends, '^')
             end
@@ -684,6 +685,7 @@ classdef Estimator < handle
                 obj.add_mixed_effects(obj.results_GTS.beta_fs(:, ind), ...
                                       obj.results_GTS.b_est(ind), ...
                                       obj.results_GTS.D_est(ind, ind), ...
+                                      obj.results_GTS.lognormal, ...
                                       labels_ondiag_GTS, labels_offdiag_GTS, ...
                                       plot_settings, legends, 'square')
             end
@@ -691,13 +693,14 @@ classdef Estimator < handle
                 obj.add_mixed_effects(truth.beta(:, ind), ...
                                       truth.b(ind), ...
                                       truth.D(ind, ind), ...
+                                      truth.lognormal, ...
                                       labels_ondiag_true, labels_offdiag_true, ...
                                       plot_settings, legends, 'pentagram')
             end
         end
     
 
-        function add_mixed_effects(obj, beta, b, D, labels_ondiag, labels_offdiag, plot_settings, legends, marker)
+        function add_mixed_effects(obj, beta, b, D, lognormal, labels_ondiag, labels_offdiag, plot_settings, legends, marker)
             params = intersect(sort(plot_settings.Parameters), 1:obj.system.P);
             
             switch marker
@@ -713,7 +716,7 @@ classdef Estimator < handle
                     if q == p
                         h1 = histogram(beta(:, p), 20, 'Normalization', 'pdf', 'FaceColor', col, 'FaceAlpha', .3);
                         grid = linspace(min(beta(:, p)), max(beta(:, p)), 30);
-                        if obj.lognormal
+                        if lognormal
                             pdf = lognpdf(grid, b(p), sqrt(D(p, p)));
                         else
                             pdf = normpdf(grid, b(p), sqrt(D(p, p)));
@@ -726,7 +729,7 @@ classdef Estimator < handle
                     else
 %                         disp('')
                         h1 = scatter(beta(:, q), beta(:, p), [], col, marker, 'MarkerEdgeAlpha', .3, 'LineWidth', lw);
-                        if obj.lognormal
+                        if lognormal
                             h2 = Estimator.mvlncontour(b([q p]), D([q p], [q p]), center, 'Color', col, 'LineWidth', lw);
                         else
                             h2 = Estimator.mvncontour(b([q p]), D([q p], [q p]), center, 'Color', col, 'LineWidth', lw);

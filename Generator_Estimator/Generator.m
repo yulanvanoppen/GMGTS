@@ -13,7 +13,8 @@ classdef Generator < handle
             default_error_std = .05;                                        % std of lognormal multiplicative errors
             default_init = system.x0' + 1e-4;                               % boundary conditions
             default_b = system.k0';                                         % initial estimate
-            
+            default_LogNormal = false;
+
             parser = inputParser();
             
             overlaps = @(x, S) ~isempty(intersect(x, S));
@@ -33,6 +34,7 @@ classdef Generator < handle
                          @(x) isempty(x) || ...
                               overlaps(string(x), string(1:system.K)) || ...
                               overlaps(string(x), string(system.states)) );
+            addParameter(parser, 'lognormal', default_LogNormal, @islogical);
             
             parse(parser, system, varargin{:});
             
@@ -91,20 +93,32 @@ classdef Generator < handle
             obj.data.init = obj.settings.init;
             obj.data.t = obj.settings.t;
             obj.data.observed = obj.settings.observed;
+            obj.data.lognormal = obj.settings.lognormal;
             obj.data.T = length(obj.settings.t);
             obj.data.L = length(obj.settings.observed);
             obj.data.N = obj.settings.N;
             
             if nargin < 2                                                   % draw nonnegative random effects
-                obj.data.beta = abs(mvnrnd(obj.settings.b, obj.settings.D, obj.settings.N));
+                if obj.data.lognormal
+                    obj.data.D = log(1 + obj.data.D ./ (obj.data.b'*obj.data.b));
+                    obj.data.b = log(obj.data.b) - .5 * diag(obj.data.D)';
+                    obj.data.beta = exp(mvnrnd(obj.data.b, obj.data.D, obj.data.N));
+                else
+                    obj.data.beta = abs(mvnrnd(obj.data.b, obj.data.D, obj.data.N));
+                end
             else
                 obj.data.beta = beta;
             end
-                                                                            % numerically integrate ODE system
-            obj.data.moriginal = obj.system.integrate(obj.data.b, obj.settings);
+                                  
+            if obj.data.lognormal                                          % numerically integrate ODE system
+                obj.data.moriginal = obj.system.integrate(exp(obj.data.b), obj.settings);
+                obj.data.mdoriginal = obj.system.rhs(obj.data.moriginal, obj.data.t, exp(obj.data.b));
+            else
+                obj.data.moriginal = obj.system.integrate(obj.data.b, obj.settings);
+                obj.data.mdoriginal = obj.system.rhs(obj.data.moriginal, obj.data.t, obj.data.b);
+            end
+                                                                            % corresponding cell-specific traces
             obj.data.original = obj.system.integrate(obj.data.beta, obj.settings);
-                                                                            % corresponding gradients
-            obj.data.mdoriginal = obj.system.rhs(obj.data.moriginal, obj.data.t, obj.data.b);
             obj.data.doriginal = obj.system.rhs(obj.data.original, obj.data.t, obj.data.beta);
             
             errors = normrnd(0, obj.settings.error_std, size(obj.data.original));

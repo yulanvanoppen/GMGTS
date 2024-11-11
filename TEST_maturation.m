@@ -16,7 +16,7 @@ noise_level = .1;
 seed = 1;
 
 generator = Generator(system ...                                            % generator setup
-                      , 'N', 10 ...                                        % number of cells
+                      , 'N', 100 ...                                        % number of cells
                       , 't', unique([0 5 10 20 dt:dt:200]) ...              % time grid
                       , 'error_std', noise_level ...                        % std of lognormal multiplicative errors
                       , 'D_mult', .25 ...                                   % covariance matrix s.t. D = diag(D_mult*beta)^2
@@ -25,8 +25,8 @@ generator = Generator(system ...                                            % ge
 
 rng(seed);
 [data, ground_truth] = generator.generate();
-% plot(generator)
-
+plot(generator)
+% data.beta = ground_truth.beta;
 
 
 %% Estimate ----------------------------------------------------------------
@@ -38,14 +38,14 @@ methods = [methods "GMGTS"];
 estimator = Estimator(system, data.traces, data.t, 2 ...                    % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'TestConvergence', true ...
+                      , 'LogNormal', false ...
+                      ...%, 'TestConvergence', true ...
                       );
 
 estimator.estimate();
 
 close all
-plot(estimator ...
-     ...%, 'True', ground_truth ...
+plot(estimator, 'True', ground_truth ...
      , 'States', 1:6 ...
      , 'MaxCells', 7)
 

@@ -51,8 +51,8 @@ classdef ConvTest < handle
             for idx = 1:sample_size
                 obj.beta_fs = repmat(sample(idx, :), obj.N, 1);             % copy to each cell
                 if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
-                obj.estimate_covariances(iter);                             % residual covariance estimation
-                obj.update_parameters(iter);                                % gradient matching
+                obj.estimate_covariances(1);                             % residual covariance estimation
+                obj.update_parameters(1);                                % gradient matching
 
                 if obj.system.P > 1                                         % compute relative iteration steps
                     obj.convergence_steps = vecnorm((beta_old - obj.beta_fs)') ./ vecnorm(beta_old');
