@@ -45,38 +45,43 @@ classdef ConvTest < handle
             proposal_mu = obj.data.b_est;
             proposal_Sigma = obj.data.D_est*4;
             
-            sample_size = 1000;
+            sample_size = 100;
+            n_funeval = 3;
+
             sample = max(1e-8, mvnrnd(proposal_mu, proposal_Sigma, sample_size));
+            if obj.settings.lognormal, sample = exp(sample); end
+            
+            f_sample = zeros(sample_size, obj.system.P, n_funeval, obj.N);
             
             for idx = 1:sample_size
+                fprintf('%d ', idx)
+                if ~mod(idx, 10), fprintf('\n'), end
                 obj.beta_fs = repmat(sample(idx, :), obj.N, 1);             % copy to each cell
-                if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
-                obj.estimate_covariances(1);                             % residual covariance estimation
-                obj.update_parameters(1);                                % gradient matching
-
-                if obj.system.P > 1                                         % compute relative iteration steps
-                    obj.convergence_steps = vecnorm((beta_old - obj.beta_fs)') ./ vecnorm(beta_old');
-                else
-                    obj.convergence_steps = abs(beta_old' - obj.beta_fs') ./ abs(beta_old');
-                end                                                         % cells that have not converged 
-                obj.not_converged = find(obj.convergence_steps >= obj.settings.tol);
-                
-                fprintf('%3d (%.1e, %.1e, %.1e)\n', iter, ...               % print iteration step quantiles .5, .9, 1.0
-                        median(obj.convergence_steps), quantile(obj.convergence_steps, .9), max(obj.convergence_steps));
-                
-                                                                            % break when 90% of cells have converged
-                if quantile(obj.convergence_steps, .9) < obj.settings.tol || iter == obj.settings.niter
-                    if obj.L < obj.system.K                                 % estimate final uncertainty of beta
-                        obj.estimate_covariances(iter, true);
-                    else
-                        obj.covariances_full_beta(iter);
-                    end
-                    break
+                for iter = 1:n_funeval
+                    if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
+                    obj.estimate_covariances(iter);                             % residual covariance estimation
+                    obj.update_parameters(iter);                                % gradient matching
+                    
+                    f_sample(idx, :, iter, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, obj.N);
                 end
             end
-            
-            obj.beta_fs(obj.beta_fs < 1e-15) = 0;                           % polish final estimates
-            obj.extract_estimates();                                        % save estimates and fitted trajectories
+
+            Lipschitz_constants = zeros(sample_size, sample_size, n_funeval, obj.N);
+            for i = 1:obj.N
+                for iter = 1:n_funeval
+                    for row = 1:sample_size
+                        for col = 1:sample_size
+                            Lipschitz_constants(row, col, iter, i) = ...
+                                norm(f_sample(row, :, iter, i) - f_sample(col, :, iter, i)) ...
+                                ./ norm(sample(row, :) - sample(col, :));
+                        end
+                    end
+                end
+            end
+
+            obj.data.convergence_starts = sample;
+            obj.data.convergence_evaluations = f_sample;
+
             output = obj.data;                                              % return data appended with FS results
         end
         
@@ -113,7 +118,7 @@ classdef ConvTest < handle
             
         
         function update_parameters(obj, iter)                           % Update (cell-specific) parameter estimates
-            for i = obj.not_converged                                       % model slopes from splines and integrations
+            for i = obj.N                                                   % model slopes from splines and integrations
                 design = obj.system.g(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
                 const = obj.system.h(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
                 response = obj.dsmoothed_fitted(2:end-1, :, i) - const;     % spline and integration slopes
@@ -165,21 +170,6 @@ classdef ConvTest < handle
         end
         
         
-        function extract_estimates(obj)                                 % Extract results 
-            obj.integrate(true);                                            % compute fitted cell trajectories
-            obj.data.beta_fs = obj.beta_fs;                                 % store results
-            obj.data.fitted_fs = obj.fitted_fs;
-            obj.data.dfitted_fs = obj.dfitted_fs;
-            obj.data.smoothed_fitted_fs = obj.smoothed_fitted;
-            obj.data.dsmoothed_fitted_fs = obj.dsmoothed_fitted;
-            obj.data.V = obj.V;
-            obj.data.varbeta = obj.varbeta;
-            obj.data.convergence_steps = obj.convergence_steps;
-            obj.data.converged = setdiff(1:obj.N, obj.not_converged);
-            if obj.settings.lognormal, obj.lognormal_approximation(), end
-        end
-        
-        
         function lognormal_approximation(obj)
             obj.data.beta_lnorm = zeros(size(obj.beta_fs));
             obj.data.varbeta_lnorm = zeros(size(obj.varbeta));
@@ -207,7 +197,7 @@ classdef ConvTest < handle
                                                                             % RHS Jacobian for each cell from smoothed measurements
             df_dX_all = obj.system.df(obj.data.smoothed, obj.data.t, obj.beta_fs);
             
-            for i = obj.not_converged                                       % estimated measurement error variances
+            for i = obj.N                                                   % estimated measurement error variances
                 S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
                 var_delta = svdinv(Z' * (S \ Z));                           % spline coefficient uncertainty
                 var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
@@ -284,7 +274,7 @@ classdef ConvTest < handle
         
         function covariances_partial(obj, rep, converged)               % Parameter uncertainties and residual covariances
             if nargin < 3, converged = false; end                       % for partial observation
-            if converged, cells = 1:obj.N; else, cells = obj.not_converged; end
+            cells = 1:obj.N;
 
             hidden = setdiff(1:obj.system.K, obj.data.observed);            % hidden/observed state/time indices
             ind_hid = reshape((1:obj.T)'+(obj.T*(hidden-1)), [], 1);
