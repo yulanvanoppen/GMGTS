@@ -113,8 +113,8 @@ classdef ConvTest < handle
                 obj.beta_fs = permute(beta_pm_eps(p, :, :), [3 2 1]);
                 for iter = 1:n_funeval
                     if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
-                    obj.estimate_covariances(iter);                             % residual covariance estimation
-                    obj.update_parameters(iter);                                % gradient matching
+                    obj.estimate_covariances(2);                             % residual covariance estimation
+                    obj.update_parameters(2);                                % gradient matching
 
                     evals_pm_eps(p, :, 1, iter, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, 1, obj.N);
                 end
@@ -122,8 +122,8 @@ classdef ConvTest < handle
                 obj.beta_fs = permute(beta_pm_eps(p+end/2, :, :), [3 2 1]);
                 for iter = 1:n_funeval
                     if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
-                    obj.estimate_covariances(iter);                             % residual covariance estimation
-                    obj.update_parameters(iter);                                % gradient matching
+                    obj.estimate_covariances(2);                             % residual covariance estimation
+                    obj.update_parameters(2);                                % gradient matching
 
                     evals_pm_eps(p, :, 2, iter, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, 1, obj.N);
                 end
