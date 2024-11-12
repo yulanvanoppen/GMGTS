@@ -58,9 +58,9 @@ classdef ConvTest < handle
                 if ~mod(idx, 10), fprintf('\n'), end
                 obj.beta_fs = repmat(sample(idx, :), obj.N, 1);             % copy to each cell
                 for iter = 1:n_funeval
-                    if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
-                    obj.estimate_covariances(iter);                             % residual covariance estimation
-                    obj.update_parameters(iter);                                % gradient matching
+                    if obj.L < obj.system.K, obj.integrate; end             % ODE integration
+                    obj.estimate_covariances(iter);                         % residual covariance estimation
+                    obj.update_parameters(iter);                            % gradient matching
                     
                     f_sample(idx, :, iter, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, obj.N);
                 end
@@ -96,13 +96,42 @@ classdef ConvTest < handle
                     scatter(obj.beta_fs(:, 1), obj.beta_fs(:, 2))
                     plot(obj.beta_fs(i, 1), obj.beta_fs(i, 2), '.', 'MarkerSize', 25)
                     subtitle = 'g(⋅)';
-                    if iter > 1, subtitle = ['g(' subtitle ')']; end
-                    if iter > 2, subtitle = ['g(' subtitle ')']; end
+                    if iter > 1, subtitle = ['g(' subtitle ')']; end %#ok<AGROW>
+                    if iter > 2, subtitle = ['g(' subtitle ')']; end %#ok<AGROW>
                     title(sprintf('Cell %d, %s', i, subtitle))
                     xlabel('kp')
                     ylabel('km')
                 end
             end
+            
+            beta_permuted = permute(obj.data.beta_fs, [3 2 1]);             % vectorized finite difference approximations
+            epsilon = max(1e-8, beta_permuted * .001);                      % of solution and RHS parameter sensitivities
+            beta_pm_eps = beta_permuted + epsilon .* kron([1; -1], eye(obj.system.P));
+
+            evals_pm_eps = zeros(obj.system.P, obj.system.P, 2, n_funeval, obj.N);
+            for p = 1:obj.system.P
+                obj.beta_fs = permute(beta_pm_eps(p, :, :), [3 2 1]);
+                for iter = 1:n_funeval
+                    if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
+                    obj.estimate_covariances(iter);                             % residual covariance estimation
+                    obj.update_parameters(iter);                                % gradient matching
+
+                    evals_pm_eps(p, :, 1, iter, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, 1, obj.N);
+                end
+                
+                obj.beta_fs = permute(beta_pm_eps(p+end/2, :, :), [3 2 1]);
+                for iter = 1:n_funeval
+                    if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
+                    obj.estimate_covariances(iter);                             % residual covariance estimation
+                    obj.update_parameters(iter);                                % gradient matching
+
+                    evals_pm_eps(p, :, 2, iter, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, 1, obj.N);
+                end
+            end
+                                                                            % restructure for rhs evaluations
+            eps_denom = 1./reshape(2*epsilon, 1, 1, obj.system.P, 1, obj.N);% finite difference approximations
+            partials_beta_fs = permute((evals_pm_eps(:, :, 1, :, :) - evals_pm_eps(:, :, 2, :, :)) .* eps_denom, [1 2 4 5]);
+            criteria_beta_fs = permute(sum(abs(partials_beta_fs)), [4 2 3]);
 
             obj.data.convergence_starts = sample;
             obj.data.convergence_evaluations = f_sample;
@@ -110,37 +139,6 @@ classdef ConvTest < handle
             output = obj.data;                                              % return data appended with FS results
         end
         
-        
-        function initialize(obj)                                        % Initial numerical optimization on population average
-%             options = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-2);
-%             value = Inf;
-%             for start = 1:obj.settings.nstart                               % uniformly sample in log parameter space
-%                 logb0 = rand(1, obj.system.P) .* (log(obj.settings.ub) - log(obj.settings.lb)) + log(obj.settings.lb);
-%                 [opt_new, value_new] = fmincon(@(logb0) obj.squares_sum(exp(logb0)), logb0, [], [], [], [], ...
-%                                                log(obj.settings.lb), log(obj.settings.ub), [], options);
-%                 if value_new < value, value = value_new; opt = opt_new; end
-%             end
-%             obj.beta_fs = repmat(exp(opt), obj.N, 1);                       % copy to each cell
-            
-            beta_init = Optimization.initialize(@obj.squares_sum, obj.settings.lb, obj.settings.ub, obj.settings.nstart);
-            obj.beta_fs = repmat(beta_init, obj.N, 1);                       % copy to each cell
-        end
-            
-
-        function ss = squares_sum(obj, b)                               % Weighted um of squared differences
-            ss = Inf;
-            try                                                             % compute fitted trajectories
-                solution = obj.system.integrate(b, obj.data, obj.data.t_data);
-                solution = solution(:, obj.data.observed, :);               % sum of squares on observed states
-                ss = sum((solution - obj.data.traces).^2 ./ mean(obj.data.traces, [1 3]).^2, 'all');
-                                                                            % add prior term (if any)
-                ss = ss + (b' - obj.settings.prior.mean)' * (obj.settings.prior.prec * obj.settings.prior.mult) ...
-                                                          * (b' - obj.settings.prior.mean);
-            catch ME
-                disp(ME)
-            end
-        end
-            
         
         function update_parameters(obj, iter)                           % Update (cell-specific) parameter estimates
             for i = 1:obj.N                                                 % model slopes from splines and integrations
@@ -191,25 +189,6 @@ classdef ConvTest < handle
             if converged                                                    % store smooth versions upon convergence
                 obj.data.fitted_fs_fine = max(1e-12, obj.system.integrate(obj.beta_fs, obj.data, obj.data.t_fine));
                 obj.data.dfitted_fs_fine = obj.system.rhs(obj.data.fitted_fs_fine, obj.data.t_fine, obj.beta_fs);
-            end
-        end
-        
-        
-        function lognormal_approximation(obj)
-            obj.data.beta_lnorm = zeros(size(obj.beta_fs));
-            obj.data.varbeta_lnorm = zeros(size(obj.varbeta));
-            for i = 1:obj.N
-                beta_i = obj.beta_fs(i, :)';
-                varbeta_i = obj.varbeta(:, :, i);
-                                                                            % moment matching
-                obj.data.varbeta_lnorm(:, :, i) = log(1 + varbeta_i ./ (beta_i*beta_i'));
-                obj.data.beta_lnorm(i, :) = log(beta_i') - .5 * diag(obj.data.varbeta_lnorm(:, :, i))';
-                
-                                                                            % unbiased log
-%                 diag_i = diag(log(.5 + sqrt(.25 + diag(diag(varbeta_i)./beta_i.^2))));
-%                 full_i = log(varbeta_i ./ (beta_i * beta_i') .* exp(-.5 * (diag_i * diag_i')) + 1);
-%                 obj.data.varbeta_lnorm(:, :, i) = full_i - diag(diag_i - diag(full_i));
-%                 obj.data.beta_lnorm(i, :) = log(beta_i');
             end
         end
         
