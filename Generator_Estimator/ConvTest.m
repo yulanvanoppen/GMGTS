@@ -33,7 +33,7 @@ classdef ConvTest < handle
             
             obj.V = repmat(eye(system.K * obj.T), 1, 1, obj.N);
             obj.varXdX = zeros(2 * system.K * obj.T, 2 * system.K * obj.T, obj.N);
-            obj.varbeta = repmat(eye(system.P), 1, 1, obj.N);
+            obj.varbeta = obj.data.varbeta;
         end
         
         
@@ -45,7 +45,7 @@ classdef ConvTest < handle
             proposal_mu = obj.data.b_est;
             proposal_Sigma = obj.data.D_est*4;
             
-            sample_size = 1000;
+            sample_size = 100;
             n_funeval = 3;
 
             sample = max(1e-8, mvnrnd(proposal_mu, proposal_Sigma, sample_size));
@@ -129,9 +129,9 @@ classdef ConvTest < handle
                 end
             end
                                                                             % restructure for rhs evaluations
-            eps_denom = 1./reshape(2*epsilon, 1, 1, obj.system.P, 1, obj.N);% finite difference approximations
-            partials_beta_fs = permute((evals_pm_eps(:, :, 1, :, :) - evals_pm_eps(:, :, 2, :, :)) .* eps_denom, [1 2 4 5]);
-            criteria_beta_fs = permute(sum(abs(partials_beta_fs)), [4 2 3]);
+            eps_denom = 1./reshape(2*epsilon, obj.system.P, 1, 1, 1, obj.N);% finite difference approximations
+            partials_beta_fs = permute((evals_pm_eps(:, :, 1, :, :) - evals_pm_eps(:, :, 2, :, :)) .* eps_denom, [1 2 4 5 3]);
+            criteria_beta_fs = permute(sum(abs(partials_beta_fs)), [4 2 3 1]);
 
             obj.data.convergence_starts = sample;
             obj.data.convergence_evaluations = f_sample;

@@ -184,6 +184,7 @@ classdef FirstStage < handle
             obj.data.smoothed_fitted_fs = obj.smoothed_fitted;
             obj.data.dsmoothed_fitted_fs = obj.dsmoothed_fitted;
             obj.data.V = obj.V;
+            obj.data.varXdX = obj.varXdX;
             obj.data.varbeta = obj.varbeta;
             obj.data.convergence_steps = obj.convergence_steps;
             obj.data.converged = setdiff(1:obj.N, obj.not_converged);
