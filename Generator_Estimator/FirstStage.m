@@ -9,6 +9,7 @@ classdef FirstStage < handle
         N                                                                   % population size
         
         beta_fs                                                             % cell-specific parameter estimates
+        beta_fs_history                                                     % record past iterations
         V                                                                   % spline/ode gradient error variances
         varXdX                                                              % state and gradient covariances
         varbeta                                                             % uncertainty estimates of beta
@@ -58,12 +59,14 @@ classdef FirstStage < handle
 
             if obj.settings.niter == 0, obj.estimate_covariances(1), end    % assume (premature) convergence
             
+            obj.beta_fs_history = zeros([size(obj.beta_fs) obj.settings.niter]);
             for iter = 1:obj.settings.niter
                 beta_old = obj.beta_fs;
 
                 if iter > 1 && obj.L < obj.system.K, obj.integrate; end     % ODE integration
                 obj.estimate_covariances(iter);                             % residual covariance estimation
                 obj.update_parameters(iter);                                % gradient matching
+                obj.beta_fs_history(:, :, iter) = obj.beta_fs;              % record past iterations
 
                 if obj.system.P > 1                                         % compute relative iteration steps
                     obj.convergence_steps = vecnorm((beta_old - obj.beta_fs)') ./ vecnorm(beta_old');
@@ -179,6 +182,7 @@ classdef FirstStage < handle
         function extract_estimates(obj)                                 % Extract results 
             obj.integrate(true);                                            % compute fitted cell trajectories
             obj.data.beta_fs = obj.beta_fs;                                 % store results
+            obj.data.beta_fs_history = obj.beta_fs_history;
             obj.data.fitted_fs = obj.fitted_fs;
             obj.data.dfitted_fs = obj.dfitted_fs;
             obj.data.smoothed_fitted_fs = obj.smoothed_fitted;

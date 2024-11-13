@@ -33,7 +33,6 @@ classdef ConvTest < handle
             
             obj.V = repmat(eye(system.K * obj.T), 1, 1, obj.N);
             obj.varXdX = zeros(2 * system.K * obj.T, 2 * system.K * obj.T, obj.N);
-            obj.varbeta = obj.data.varbeta;
         end
         
         
@@ -105,33 +104,37 @@ classdef ConvTest < handle
             end
             
             beta_permuted = permute(obj.data.beta_fs, [3 2 1]);             % vectorized finite difference approximations
-            epsilon = max(1e-8, beta_permuted * .001);                      % of solution and RHS parameter sensitivities
+            epsilon = max(1e-12, beta_permuted * .000001);                    % of solution and RHS parameter sensitivities
             beta_pm_eps = beta_permuted + epsilon .* kron([1; -1], eye(obj.system.P));
 
-            evals_pm_eps = zeros(obj.system.P, obj.system.P, 2, n_funeval, obj.N);
+            evals_pm_eps = zeros(obj.system.P, obj.system.P, 2, obj.N);
             for p = 1:obj.system.P
                 obj.beta_fs = permute(beta_pm_eps(p, :, :), [3 2 1]);
-                for iter = 1:n_funeval
-                    if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
-                    obj.estimate_covariances(2);                             % residual covariance estimation
-                    obj.update_parameters(2);                                % gradient matching
+                obj.V = obj.data.V;
+                obj.varXdX = obj.data.varXdX;
+                obj.varbeta = obj.data.varbeta;
+                
+                if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
+                obj.estimate_covariances(2);                                % residual covariance estimation
+                obj.update_parameters(2);                                   % gradient matching
 
-                    evals_pm_eps(p, :, 1, iter, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, 1, obj.N);
-                end
+                evals_pm_eps(p, :, 1, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, obj.N);
                 
                 obj.beta_fs = permute(beta_pm_eps(p+end/2, :, :), [3 2 1]);
-                for iter = 1:n_funeval
-                    if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
-                    obj.estimate_covariances(2);                             % residual covariance estimation
-                    obj.update_parameters(2);                                % gradient matching
+                obj.V = obj.data.V;
+                obj.varXdX = obj.data.varXdX;
+                obj.varbeta = obj.data.varbeta;
+                
+                if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
+                obj.estimate_covariances(2);                                % residual covariance estimation
+                obj.update_parameters(2);                                   % gradient matching
 
-                    evals_pm_eps(p, :, 2, iter, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, 1, obj.N);
-                end
+                evals_pm_eps(p, :, 2, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, obj.N);
             end
                                                                             % restructure for rhs evaluations
-            eps_denom = 1./reshape(2*epsilon, obj.system.P, 1, 1, 1, obj.N);% finite difference approximations
-            partials_beta_fs = permute((evals_pm_eps(:, :, 1, :, :) - evals_pm_eps(:, :, 2, :, :)) .* eps_denom, [1 2 4 5 3]);
-            criteria_beta_fs = permute(sum(abs(partials_beta_fs)), [4 2 3 1]);
+            eps_denom = 1./reshape(2*epsilon, obj.system.P, 1, 1, obj.N);   % finite difference approximations
+            partials_beta_fs = permute((evals_pm_eps(:, :, 1, :) - evals_pm_eps(:, :, 2, :)) .* eps_denom, [1 2 4 3]);
+            criteria_beta_fs = permute(sum(abs(partials_beta_fs)), [3 2 1]);
 
             obj.data.convergence_starts = sample;
             obj.data.convergence_evaluations = f_sample;

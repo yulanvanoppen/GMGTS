@@ -25,7 +25,7 @@ generator = Generator(system ...                                            % ge
 
 rng(seed);
 [data, ground_truth] = generator.generate();
-plot(generator)
+% plot(generator)
 % data.beta = ground_truth.beta;
 
 
@@ -35,9 +35,11 @@ methods = [];
 methods = [methods "GMGTS"];
 % methods = [methods "GTS"];
 
-estimator = Estimator(system, data.traces, data.t, 2 ...                    % estimator setup
+estimator = Estimator(system, data ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
+                      ...%, 'MaxIterationsFS', 5000 ...
+                      ...%, 'ConvergenceTolFS', 1e-12 ...
                       , 'TestConvergence', true ...
                       );
 
