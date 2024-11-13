@@ -3,21 +3,19 @@
 clearvars
 close all
 
-model =  'model_maturation_onestep.txt';
-system = ODEIQM(model, 'FixedParameters', ["kr" "kdr" "kdil" "d"]);
+% model =  'model_generalizedLV2.txt';
+% system = ODEIQM(model, 'FixedParameters', strcat('r', string(1:16)));
+% save('system_generalizedLV2.mat', 'system')
 
-save('system_maturation_delay.mat', 'system')
+load('system_generalizedLV2.mat')
 
-load('system_maturation_delay.mat')
-
-first_obs = 2;
-dt = 5;
-noise_level = .1;
+first_obs = 5;
+noise_level = .05;
 seed = 1;
 
 generator = Generator(system ...                                            % generator setup
-                      , 'N', 10 ...                                        % number of cells
-                      , 't', unique([0 5 10 20 dt:dt:200]) ...              % time grid
+                      , 'N', 10 ...                                         % number of cells
+                      , 't', 0:20 ...                                       % time grid
                       , 'error_std', noise_level ...                        % std of lognormal multiplicative errors
                       , 'D_mult', .25 ...                                   % covariance matrix s.t. D = diag(D_mult*beta)^2
                       , 'observed', first_obs:system.K ...                  % observed states labels (or indices)
@@ -25,7 +23,7 @@ generator = Generator(system ...                                            % ge
 
 rng(seed);
 [data, ground_truth] = generator.generate();
-% plot(generator)
+plot(generator)
 % data.beta = ground_truth.beta;
 
 
@@ -38,7 +36,7 @@ methods = [methods "GMGTS"];
 estimator = Estimator(system, data ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'MaxIterationsFS', 5000 ...
+                      , 'MaxIterationsFS', 50 ...
                       , 'ConvergenceTolFS', 1e-12 ...
                       , 'TestConvergence', true ...
                       );
@@ -47,6 +45,6 @@ estimator.estimate();
 
 close all
 plot(estimator, 'True', ground_truth ...
-     , 'States', 1:6 ...
+     , 'States', 5:16 ...
      , 'MaxCells', 7)
 

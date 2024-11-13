@@ -222,16 +222,19 @@ classdef Smoother < handle
             end
                                                                             
             curvature = abs(zscore_ddy) > 2*std(zscore_ddy);                % add end of initial fast dynamics (if any)
-            fast_dynamics_end = ones(1, obj.L);
+            fast_dynamics_end = zeros(1, obj.L);
             for state = 1:obj.L                                             % first point with two or more regular curvatures
-                n_fast_dynamics = find(diff([find(curvature(:, state)); obj.T+1]) > 2, 1);
-                fast_dynamics_ind = find(curvature(:, state), n_fast_dynamics);
-                fast_dynamics_end(state) = fast_dynamics_ind(end);
+                if any(curvature(:, state))
+                    n_fast_dynamics = find(diff([find(curvature(:, state)); obj.T+2]) > 2, 1);
+                    fast_dynamics_ind = find(curvature(:, state), n_fast_dynamics);
+                    fast_dynamics_end(state) = fast_dynamics_ind(end);
+                end
             end
 
             base_curvature = base_peaks_troughs;                            % add fast dynamics end moving existing points if needed
             for state = 1:obj.L
                 idx = fast_dynamics_end(state);                             % remove adjacent existing points
+                if idx == 0, continue, end
                 if idx > 1 && idx < obj.T-2 && base_peaks_troughs(idx-1, state) && base_peaks_troughs(idx+1, state)
                     base_curvature(idx-1:idx+1, state) = [false true false];
                 elseif idx > 1 && base_peaks_troughs(idx-1, state)
