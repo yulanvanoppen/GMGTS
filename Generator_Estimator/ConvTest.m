@@ -33,6 +33,7 @@ classdef ConvTest < handle
             
             obj.V = repmat(eye(system.K * obj.T), 1, 1, obj.N);
             obj.varXdX = zeros(2 * system.K * obj.T, 2 * system.K * obj.T, obj.N);
+            obj.varbeta =  repmat(eye(system.P), 1, 1, obj.N);
         end
         
         
@@ -40,53 +41,55 @@ classdef ConvTest < handle
                                                                             % substitute smoothed measurements
             obj.smoothed_fitted(:, obj.data.observed, :) = obj.data.smoothed;
             obj.dsmoothed_fitted(:, obj.data.observed, :) = obj.data.dsmoothed;
-            
-%             obj.LipschitzConstants()
-            
-            beta_permuted = permute(obj.data.beta_fs, [3 2 1]);             % vectorized finite difference approximations
-            epsilon = max(1e-12, beta_permuted * .000001);                    % of solution and RHS parameter sensitivities
-            beta_pm_eps = beta_permuted + epsilon .* kron([1; -1], eye(obj.system.P));
 
-            evals_pm_eps = zeros(obj.system.P, obj.system.P, 2, obj.N);
-            for p = 1:obj.system.P
-                obj.beta_fs = permute(beta_pm_eps(p, :, :), [3 2 1]);
-                obj.V = obj.data.V;
-                obj.varXdX = obj.data.varXdX;
-                obj.varbeta = obj.data.varbeta;
-                
-                if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
-                obj.estimate_covariances(2);                                % residual covariance estimation
-                obj.update_parameters(2);                                   % gradient matching
-
-                evals_pm_eps(p, :, 1, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, obj.N);
-                
-                obj.beta_fs = permute(beta_pm_eps(p+end/2, :, :), [3 2 1]);
-                obj.V = obj.data.V;
-                obj.varXdX = obj.data.varXdX;
-                obj.varbeta = obj.data.varbeta;
-                
-                if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
-                obj.estimate_covariances(2);                                % residual covariance estimation
-                obj.update_parameters(2);                                   % gradient matching
-
-                evals_pm_eps(p, :, 2, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, obj.N);
-            end
-                                                                            % restructure for rhs evaluations
-            eps_denom = 1./reshape(2*epsilon, obj.system.P, 1, 1, obj.N);   % finite difference approximations
-            partials_beta_fs = permute((evals_pm_eps(:, :, 1, :) - evals_pm_eps(:, :, 2, :)) .* eps_denom, [1 2 4 3]);
-            criteria_beta_fs = permute(sum(abs(partials_beta_fs)), [3 2 1]);
+            obj.attraction();
             
-            %%%%%%%%%%%%%%% BTCS
-            figure
-            tiledlayout(3, 3)
-            for x = 1:3
-                for y = x+1:4
-                    nexttile(x + (y-2)*3)
-                    plot(reshape(obj.data.beta_fs_history(1, x, :), [], 1), reshape(obj.data.beta_fs_history(1, y, :), [], 1), 'o-')
-                    xlabel(obj.system.parameters_variable(x))
-                    ylabel(obj.system.parameters_variable(y))
-                end
-            end
+%             obj.Lipschitz()
+            
+%             beta_permuted = permute(obj.data.beta_fs, [3 2 1]);             % vectorized finite difference approximations
+%             epsilon = max(1e-12, beta_permuted * .000001);                    % of solution and RHS parameter sensitivities
+%             beta_pm_eps = beta_permuted + epsilon .* kron([1; -1], eye(obj.system.P));
+% 
+%             evals_pm_eps = zeros(obj.system.P, obj.system.P, 2, obj.N);
+%             for p = 1:obj.system.P
+%                 obj.beta_fs = permute(beta_pm_eps(p, :, :), [3 2 1]);
+%                 obj.V = obj.data.V;
+%                 obj.varXdX = obj.data.varXdX;
+%                 obj.varbeta = obj.data.varbeta;
+%                 
+%                 if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
+%                 obj.estimate_covariances(2);                                % residual covariance estimation
+%                 obj.update_parameters(2);                                   % gradient matching
+% 
+%                 evals_pm_eps(p, :, 1, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, obj.N);
+%                 
+%                 obj.beta_fs = permute(beta_pm_eps(p+end/2, :, :), [3 2 1]);
+%                 obj.V = obj.data.V;
+%                 obj.varXdX = obj.data.varXdX;
+%                 obj.varbeta = obj.data.varbeta;
+%                 
+%                 if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
+%                 obj.estimate_covariances(2);                                % residual covariance estimation
+%                 obj.update_parameters(2);                                   % gradient matching
+% 
+%                 evals_pm_eps(p, :, 2, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, obj.N);
+%             end
+%                                                                             % restructure for rhs evaluations
+%             eps_denom = 1./reshape(2*epsilon, obj.system.P, 1, 1, obj.N);   % finite difference approximations
+%             partials_beta_fs = permute((evals_pm_eps(:, :, 1, :) - evals_pm_eps(:, :, 2, :)) .* eps_denom, [1 2 4 3]);
+%             criteria_beta_fs = permute(sum(abs(partials_beta_fs)), [3 2 1]);
+%             
+%             %%%%%%%%%%%%%%% BTCS
+%             figure
+%             tiledlayout(3, 3)
+%             for x = 1:3
+%                 for y = x+1:4
+%                     nexttile(x + (y-2)*3)
+%                     plot(reshape(obj.data.beta_fs_history(1, x, :), [], 1), reshape(obj.data.beta_fs_history(1, y, :), [], 1), 'o-')
+%                     xlabel(obj.system.parameters_variable(x))
+%                     ylabel(obj.system.parameters_variable(y))
+%                 end
+%             end
 
 %             obj.data.convergence_starts = sample;
 %             obj.data.convergence_evaluations = f_sample;
@@ -95,7 +98,7 @@ classdef ConvTest < handle
         end
         
         
-        function LipschitzConstants(obj)
+        function Lipschitz(obj)
             proposal_mu = obj.data.b_est;
             proposal_Sigma = obj.data.D_est*4;
             
@@ -111,6 +114,10 @@ classdef ConvTest < handle
                 fprintf('%d ', idx)
                 if ~mod(idx, 10), fprintf('\n'), end
                 obj.beta_fs = repmat(sample(idx, :), obj.N, 1);             % copy to each cell
+                obj.V = repmat(eye(obj.system.K * obj.T), 1, 1, obj.N);
+                obj.varXdX = zeros(2 * obj.system.K * obj.T, 2 * obj.system.K * obj.T, obj.N);
+                obj.varbeta =  repmat(eye(obj.system.P), 1, 1, obj.N);
+
                 for iter = 1:n_funeval
                     if obj.L < obj.system.K, obj.integrate; end             % ODE integration
                     obj.estimate_covariances(iter);                         % residual covariance estimation
@@ -157,6 +164,68 @@ classdef ConvTest < handle
                     ylabel('km')
                 end
             end
+        end
+
+
+        function attraction(obj)
+            proposal_mu = obj.data.b_est;
+            proposal_Sigma = obj.data.D_est*4;
+            
+            sample_size = 100;
+            n_funeval = 50;
+
+            sample = max(1e-8, mvnrnd(proposal_mu, proposal_Sigma, sample_size));
+            if obj.settings.lognormal, sample = exp(sample); end
+            
+            beta_sample = zeros(sample_size, obj.system.P, obj.N);
+            converged_sample = false(sample_size, obj.N);
+            attraction_basins = repmat({zeros(0, obj.system.P)}, 1, obj.N);
+            for idx = 1:sample_size
+                fprintf('%d ', idx)
+                if ~mod(idx, 10), fprintf('\n'), end
+
+                obj.beta_fs = repmat(sample(idx, :), obj.N, 1);             % copy to each cell
+                obj.V = repmat(eye(obj.system.K * obj.T), 1, 1, obj.N);
+                obj.varXdX = zeros(2 * obj.system.K * obj.T, 2 * obj.system.K * obj.T, obj.N);
+                obj.varbeta =  repmat(eye(obj.system.P), 1, 1, obj.N);
+
+                for iter = 1:n_funeval
+                    if obj.L < obj.system.K, obj.integrate; end             % ODE integration
+                    obj.estimate_covariances(iter);                         % residual covariance estimation
+                    obj.update_parameters(iter);                            % gradient matching
+                    
+                    if obj.system.P > 1                                     % compute relative iteration steps
+                        obj.convergence_steps = vecnorm((obj.data.beta_fs - obj.beta_fs)') ./ vecnorm(obj.data.beta_fs');
+                    else
+                        obj.convergence_steps = abs(obj.data.beta_fs' - obj.beta_fs') ./ abs(obj.data.beta_fs');
+                    end
+                   
+                    if max(obj.convergence_steps) < .01 || iter > 5 && min(obj.convergence_steps) > .5
+                        break
+                    end
+                end
+
+                beta_sample(idx, :, :) = reshape(obj.beta_fs', 1, obj.system.P, obj.N);
+                converged_sample(idx, :) = obj.convergence_steps < .05; 
+            end
+
+            for i = 1:obj.N, attraction_basins{i} = sample(converged_sample(:, i), :); end
+            
+            figure
+            tiledlayout(2, 5)
+            for i = 1:10
+                nexttile(i)
+                scatter(attraction_basins{i}(:, 1), attraction_basins{i}(:, 2), ...
+                        'filled', MarkerFaceAlpha=.01, MarkerEdgeAlpha=.01)
+                hold on
+                scatter(obj.beta_fs(:, 1), obj.beta_fs(:, 2))
+                plot(obj.beta_fs(i, 1), obj.beta_fs(i, 2), '.', 'MarkerSize', 25)
+                title(sprintf('Cell %d', i))
+                xlabel('kp')
+                ylabel('km')
+            end
+
+            disp(1)
         end
         
         
