@@ -178,6 +178,7 @@ classdef ConvTest < handle
             if obj.settings.lognormal, sample = exp(sample); end
             
             beta_sample = zeros(sample_size, obj.system.P, obj.N);
+            steps_sample = zeros(sample_size, obj.N);
             converged_sample = false(sample_size, obj.N);
             attraction_basins = repmat({zeros(0, obj.system.P)}, 1, obj.N);
             for idx = 1:sample_size
@@ -206,7 +207,8 @@ classdef ConvTest < handle
                 end
 
                 beta_sample(idx, :, :) = reshape(obj.beta_fs', 1, obj.system.P, obj.N);
-                converged_sample(idx, :) = obj.convergence_steps < .05; 
+                steps_sample(idx, :) = obj.convergence_steps;
+                converged_sample(idx, :) = obj.convergence_steps > .05; 
             end
 
             for i = 1:obj.N, attraction_basins{i} = sample(converged_sample(:, i), :); end
@@ -216,7 +218,7 @@ classdef ConvTest < handle
             for i = 1:10
                 nexttile(i)
                 scatter(attraction_basins{i}(:, 1), attraction_basins{i}(:, 2), ...
-                        'filled', MarkerFaceAlpha=.01, MarkerEdgeAlpha=.01)
+                        'filled', MarkerFaceAlpha=.3, MarkerEdgeAlpha=.3)
                 hold on
                 scatter(obj.beta_fs(:, 1), obj.beta_fs(:, 2))
                 plot(obj.beta_fs(i, 1), obj.beta_fs(i, 2), '.', 'MarkerSize', 25)
