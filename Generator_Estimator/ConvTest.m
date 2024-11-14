@@ -41,6 +41,61 @@ classdef ConvTest < handle
             obj.smoothed_fitted(:, obj.data.observed, :) = obj.data.smoothed;
             obj.dsmoothed_fitted(:, obj.data.observed, :) = obj.data.dsmoothed;
             
+%             obj.LipschitzConstants()
+            
+            beta_permuted = permute(obj.data.beta_fs, [3 2 1]);             % vectorized finite difference approximations
+            epsilon = max(1e-12, beta_permuted * .000001);                    % of solution and RHS parameter sensitivities
+            beta_pm_eps = beta_permuted + epsilon .* kron([1; -1], eye(obj.system.P));
+
+            evals_pm_eps = zeros(obj.system.P, obj.system.P, 2, obj.N);
+            for p = 1:obj.system.P
+                obj.beta_fs = permute(beta_pm_eps(p, :, :), [3 2 1]);
+                obj.V = obj.data.V;
+                obj.varXdX = obj.data.varXdX;
+                obj.varbeta = obj.data.varbeta;
+                
+                if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
+                obj.estimate_covariances(2);                                % residual covariance estimation
+                obj.update_parameters(2);                                   % gradient matching
+
+                evals_pm_eps(p, :, 1, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, obj.N);
+                
+                obj.beta_fs = permute(beta_pm_eps(p+end/2, :, :), [3 2 1]);
+                obj.V = obj.data.V;
+                obj.varXdX = obj.data.varXdX;
+                obj.varbeta = obj.data.varbeta;
+                
+                if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
+                obj.estimate_covariances(2);                                % residual covariance estimation
+                obj.update_parameters(2);                                   % gradient matching
+
+                evals_pm_eps(p, :, 2, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, obj.N);
+            end
+                                                                            % restructure for rhs evaluations
+            eps_denom = 1./reshape(2*epsilon, obj.system.P, 1, 1, obj.N);   % finite difference approximations
+            partials_beta_fs = permute((evals_pm_eps(:, :, 1, :) - evals_pm_eps(:, :, 2, :)) .* eps_denom, [1 2 4 3]);
+            criteria_beta_fs = permute(sum(abs(partials_beta_fs)), [3 2 1]);
+            
+            %%%%%%%%%%%%%%% BTCS
+            figure
+            tiledlayout(3, 3)
+            for x = 1:3
+                for y = x+1:4
+                    nexttile(x + (y-2)*3)
+                    plot(reshape(obj.data.beta_fs_history(1, x, :), [], 1), reshape(obj.data.beta_fs_history(1, y, :), [], 1), 'o-')
+                    xlabel(obj.system.parameters_variable(x))
+                    ylabel(obj.system.parameters_variable(y))
+                end
+            end
+
+%             obj.data.convergence_starts = sample;
+%             obj.data.convergence_evaluations = f_sample;
+
+            output = obj.data;                                              % return data appended with FS results
+        end
+        
+        
+        function LipschitzConstants(obj)
             proposal_mu = obj.data.b_est;
             proposal_Sigma = obj.data.D_est*4;
             
@@ -102,44 +157,6 @@ classdef ConvTest < handle
                     ylabel('km')
                 end
             end
-            
-            beta_permuted = permute(obj.data.beta_fs, [3 2 1]);             % vectorized finite difference approximations
-            epsilon = max(1e-12, beta_permuted * .000001);                    % of solution and RHS parameter sensitivities
-            beta_pm_eps = beta_permuted + epsilon .* kron([1; -1], eye(obj.system.P));
-
-            evals_pm_eps = zeros(obj.system.P, obj.system.P, 2, obj.N);
-            for p = 1:obj.system.P
-                obj.beta_fs = permute(beta_pm_eps(p, :, :), [3 2 1]);
-                obj.V = obj.data.V;
-                obj.varXdX = obj.data.varXdX;
-                obj.varbeta = obj.data.varbeta;
-                
-                if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
-                obj.estimate_covariances(2);                                % residual covariance estimation
-                obj.update_parameters(2);                                   % gradient matching
-
-                evals_pm_eps(p, :, 1, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, obj.N);
-                
-                obj.beta_fs = permute(beta_pm_eps(p+end/2, :, :), [3 2 1]);
-                obj.V = obj.data.V;
-                obj.varXdX = obj.data.varXdX;
-                obj.varbeta = obj.data.varbeta;
-                
-                if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
-                obj.estimate_covariances(2);                                % residual covariance estimation
-                obj.update_parameters(2);                                   % gradient matching
-
-                evals_pm_eps(p, :, 2, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, obj.N);
-            end
-                                                                            % restructure for rhs evaluations
-            eps_denom = 1./reshape(2*epsilon, obj.system.P, 1, 1, obj.N);   % finite difference approximations
-            partials_beta_fs = permute((evals_pm_eps(:, :, 1, :) - evals_pm_eps(:, :, 2, :)) .* eps_denom, [1 2 4 3]);
-            criteria_beta_fs = permute(sum(abs(partials_beta_fs)), [3 2 1]);
-
-            obj.data.convergence_starts = sample;
-            obj.data.convergence_evaluations = f_sample;
-
-            output = obj.data;                                              % return data appended with FS results
         end
         
         
