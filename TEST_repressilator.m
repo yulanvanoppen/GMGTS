@@ -3,10 +3,10 @@
 clearvars
 close all
 
-model =  'model_repressilator_full.txt';
-system = ODEIQM(model, 'FixedParameters', ["DNAT" "kf" "Kd" "m1" "p1"]);
-
-save('system_repressilator.mat', 'system')
+% model =  'model_repressilator_full.txt';
+% system = ODEIQM(model, 'FixedParameters', ["DNAT" "kf" "Kd" "m1" "p1"]);
+% 
+% save('system_repressilator.mat', 'system')
 
 load('system_repressilator.mat')
 
