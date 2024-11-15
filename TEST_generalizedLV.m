@@ -9,7 +9,7 @@ close all
 
 load('system_generalizedLV2.mat')
 
-first_obs = 5;
+first_obs = 10;
 noise_level = .05;
 seed = 1;
 
@@ -45,6 +45,6 @@ estimator.estimate();
 
 close all
 plot(estimator, 'True', ground_truth ...
-     , 'States', 5:16 ...
+     , 'States', 9:16 ...
      , 'MaxCells', 7)
 

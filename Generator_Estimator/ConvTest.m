@@ -276,8 +276,8 @@ classdef ConvTest < handle
                 hold on
                 h = plot(repmat(beta_sample(:, 1, end, i)', 2, 1), repmat(beta_sample(:, 2, end, i)', 2, 1), 'o');
                 set(h, {'color'}, num2cell(colors(:, :, i), 2));
-                h2 = scatter(obj.data.beta_fs(:, 1), obj.data.beta_fs(:, 2), 300, '.', MarkerEdgeColor="#D95319")
-                h3 = plot(obj.data.beta_fs(i, 1), obj.data.beta_fs(i, 2), '.', MarkerSize=30, Color="#7E2F8E")
+                h2 = scatter(obj.data.beta_fs(:, 1), obj.data.beta_fs(:, 2), 300, '.', MarkerEdgeColor="#D95319");
+                h3 = plot(obj.data.beta_fs(i, 1), obj.data.beta_fs(i, 2), '.', MarkerSize=30, Color="#7E2F8E");
                 title(sprintf('Cell %d', i))
                 xlabel('kp')
                 ylabel('km')
@@ -286,11 +286,11 @@ classdef ConvTest < handle
             end
             
 %             close all
-            figure
-            h = plot(repmat(beta_sample(:, 1, end, 1), 1, 2)', repmat(beta_sample(:, 2, end, 1), 1, 2)', 'o');
-            set(h, {'color'}, num2cell(colors(:, :, 1), 2));
-            hold on
-            plot(obj.data.beta_fs(1, 1), obj.data.beta_fs(1, 2), '.', MarkerSize=30, Color="#7E2F8E")
+%             figure
+%             h = plot(repmat(beta_sample(:, 1, end, 1), 1, 2)', repmat(beta_sample(:, 2, end, 1), 1, 2)', 'o');
+%             set(h, {'color'}, num2cell(colors(:, :, 1), 2));
+%             hold on
+%             plot(obj.data.beta_fs(1, 1), obj.data.beta_fs(1, 2), '.', MarkerSize=30, Color="#7E2F8E")
             
 
             disp(1)
