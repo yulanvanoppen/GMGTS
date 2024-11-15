@@ -132,7 +132,7 @@ classdef Smoother < handle
         function update_variances(obj, states)                          % Estimate variances from current splines
             for k = states                                                  % smoothed measurements
                 predicted = obj.B{k}' * reshape(obj.delta{k}, obj.bsplines{k}.card, obj.N);
-                design = [ones(obj.N * obj.T, 1) flatten(predicted).^2];    % columns for additive and multiplicative noise
+                design = [ones(obj.N*obj.T, 1) flatten(predicted).^2];      % columns for additive and multiplicative noise
                 response = (flatten(predicted) - flatten(obj.data.traces(:, k, :))).^2;
                 
                 coefficients = lsqnonneg(design, response)';                 % initialize nonzero LS estimates for noise parameters

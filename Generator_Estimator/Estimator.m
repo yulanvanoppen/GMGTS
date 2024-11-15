@@ -155,7 +155,7 @@ classdef Estimator < handle
         end
 
 
-        function parse_parameters(obj, parser)                               % Parse Name/Value constructor arguments
+        function parse_parameters(obj, parser)                          % Parse Name/Value constructor arguments
             obj.stages = parser.Results.Stages;
             obj.method = string(parser.Results.Methods);
             obj.autoknots = parser.Results.AutoKnots;
@@ -212,18 +212,21 @@ classdef Estimator < handle
             obj.GMGTS_settings.fs = struct('lb', obj.lb, 'ub', obj.ub, 't_fs', obj.t_fs, 'weights', weights, ...
                                            'niter', obj.niterFS, 'tol', obj.tolFS, 'nstart', obj.nmultistart, ...
                                            'lognormal', obj.lognormal, 'prior', obj.prior);
-            obj.GMGTS_settings.ss = struct('weights', weights, 'niter', obj.niterSS, 'tol', obj.tolSS, ...
+            obj.GMGTS_settings.ss = struct('niter', obj.niterSS, 'tol', obj.tolSS, ...
                                            'lognormal', obj.lognormal);
         end
         
         
         function constructor_GTS(obj)
 %             optindices = 1:16;
-            optindices = 1:length(obj.data.t);
+            optindices = 1:length(obj.data.t);                              % time point indices to restrict opt to
             
             obj.GTS_settings.fs = struct('lb', obj.lb, 'ub', obj.ub, 'optindices', optindices, ...
-                                         'nrep', obj.niterFS, 'tol', obj.tolSS, 'nstart', obj.nmultistart, 'prior', obj.prior);
-            obj.GTS_settings.ss = struct('nrep', obj.niterSS, 'tol', obj.tolSS, 'prior', obj.prior);
+                                         'niter', obj.niterFS, 'tol', obj.tolSS, ...
+                                         'nstart', obj.nmultistart, 'prior', obj.prior, ...
+                                         'lognormal', obj.lognormal);
+            obj.GTS_settings.ss = struct('niter', obj.niterSS, 'tol', obj.tolSS, ...
+                                         'lognormal', obj.lognormal);
         end
         
         
@@ -278,8 +281,8 @@ classdef Estimator < handle
 
             if obj.stages == 2
                 tic
-                obj.GTS_second_stage = SecondStageGTS(obj.results_GTS, obj.system, ...
-                                                      obj.GTS_settings.ss);
+                obj.GTS_second_stage = SecondStage(obj.results_GTS, obj.system, ...
+                                                   obj.GTS_settings.ss);
                 obj.results_GTS = obj.GTS_second_stage.optimize();
                 if ~silent, toc_ss_GTS = toc, else, toc_ss_GTS = toc; end
             end
@@ -595,7 +598,7 @@ classdef Estimator < handle
                                         plot_settings, legends, ':')
             end
             if ismember("GTS", obj.method)
-                obj.add_population_plot(obj.results_GTS.t, obj.results_GTS.population, mean_label_GTS, ...
+                obj.add_population_plot(obj.results_GTS.t_fine, obj.results_GTS.population, mean_label_GTS, ...
                                         obj.results_GTS.fitted2, CI_label_GTS, ...
                                         plot_settings, legends, '-.')
             end

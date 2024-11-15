@@ -3,7 +3,7 @@ classdef Optimization < handle
     properties (Constant)
         options_quadprog = optimoptions('quadprog', 'Algorithm', 'active-set', 'Display', 'off', 'OptimalityTolerance', 1e-12);
         options_noisepar = optimoptions('fmincon', 'Display', 'off', 'OptimalityTolerance', 1e-3);
-        options_initialization = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-2);
+        options_initialization = optimoptions('fmincon', 'Display', 'off', 'OptimalityTolerance', 1e-3);
     end
     
 
@@ -41,11 +41,16 @@ classdef Optimization < handle
         end
 
 
-        function beta = initialize(SS, lb, ub, nstart)                  % Initial numerical optimization on population average
+        function beta = least_squares(SS, lb, ub, nstart, init)           % (Multistarted) numerical least squares
+            if nargin == 5, nstart = 1; end
             value = Inf;
             for start = 1:nstart
-                logb0 = rand(1, numel(lb)) .* (log(ub) - log(lb)) + log(lb);% uniformly sample in log parameter space
-                [opt_new, value_new] = fmincon(@(logb0) SS(exp(logb0)), logb0, [], [], [], [], ...
+                if nargin == 5
+                    loginit = log(init);                                    
+                else                                                        % uniformly sample in log parameter space
+                    loginit = rand(1, numel(lb)) .* (log(ub) - log(lb)) + log(lb);
+                end
+                [opt_new, value_new] = fmincon(@(logbeta) SS(exp(logbeta)), loginit, [], [], [], [], ...
                                                log(lb), log(ub), [], Optimization.options_initialization);
                 if value_new < value, value = value_new; opt = opt_new; end
             end

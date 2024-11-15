@@ -32,31 +32,31 @@ classdef FirstStage < handle
             
             [obj.T, obj.L, obj.N] = size(data.smoothed);                    % extract from trajectory dimensions
             
-            obj.convergence_steps = ones(1, obj.N);                         % ensure no cells are considered converged
-            obj.not_converged = 1:obj.N;
-            
             obj.V = repmat(eye(system.K * obj.T), 1, 1, obj.N);
             obj.varXdX = zeros(2 * system.K * obj.T, 2 * system.K * obj.T, obj.N);
             obj.varbeta = repmat(eye(system.P), 1, 1, obj.N);
             
+            obj.convergence_steps = ones(1, obj.N);                         % ensure no cells are considered converged
+            obj.not_converged = 1:obj.N;
+            
             if obj.L < system.K
-                obj.initialize()                                            % numerically optimize
-                obj.integrate(settings.niter == 0)                           % save solution if 'converged'
+                obj.initialize()                                            % numerically optimize population average
+                obj.integrate(settings.niter == 0)                          % save solution if 'converged'
             end
         end
         
         
         function output = optimize(obj)                                 % Main optimization function
                                                                             % substitute smoothed measurements
-            obj.smoothed_fitted(:, obj.data.observed, :) = obj.data.smoothed;
-            obj.dsmoothed_fitted(:, obj.data.observed, :) = obj.data.dsmoothed;
-            
             if obj.L == obj.system.K
-                disp('Full observation GMGTS: Gradient matching only')
+                disp('Full observation GMGTS: Gradient matching using Feasible GLS')
             else
                 disp('Partial observation GMGTS: Extended iterative scheme')
             end
 
+            obj.smoothed_fitted(:, obj.data.observed, :) = obj.data.smoothed;
+            obj.dsmoothed_fitted(:, obj.data.observed, :) = obj.data.dsmoothed;
+            
             if obj.settings.niter == 0, obj.estimate_covariances(1), end    % assume (premature) convergence
             
             obj.beta_fs_history = zeros([size(obj.beta_fs) obj.settings.niter]);
@@ -83,43 +83,33 @@ classdef FirstStage < handle
                     if obj.L < obj.system.K                                 % estimate final uncertainty of beta
                         obj.estimate_covariances(iter, true);
                     else
-                        obj.covariances_full_beta(iter);
+                        obj.uncertainties_beta(iter);
                     end
                     break
                 end
             end
             
             obj.beta_fs(obj.beta_fs < 1e-15) = 0;                           % polish final estimates
-            obj.extract_estimates();                                        % save estimates and fitted trajectories
+            obj.save_estimates();                                           % save estimates and fitted trajectories
             output = obj.data;                                              % return data appended with FS results
         end
         
         
         function initialize(obj)                                        % Initial numerical optimization on population average
-%             options = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-2);
-%             value = Inf;
-%             for start = 1:obj.settings.nstart                               % uniformly sample in log parameter space
-%                 logb0 = rand(1, obj.system.P) .* (log(obj.settings.ub) - log(obj.settings.lb)) + log(obj.settings.lb);
-%                 [opt_new, value_new] = fmincon(@(logb0) obj.squares_sum(exp(logb0)), logb0, [], [], [], [], ...
-%                                                log(obj.settings.lb), log(obj.settings.ub), [], options);
-%                 if value_new < value, value = value_new; opt = opt_new; end
-%             end
-%             obj.beta_fs = repmat(exp(opt), obj.N, 1);                       % copy to each cell
-            
-            beta_init = Optimization.initialize(@obj.squares_sum, obj.settings.lb, obj.settings.ub, obj.settings.nstart);
-            obj.beta_fs = repmat(beta_init, obj.N, 1);                       % copy to each cell
+            beta_init = Optimization.least_squares(@obj.squares_sum, obj.settings.lb, obj.settings.ub, obj.settings.nstart);
+            obj.beta_fs = repmat(beta_init, obj.N, 1);                      % copy to each cell
         end
             
 
-        function ss = squares_sum(obj, b)                               % Weighted um of squared differences
+        function ss = squares_sum(obj, beta)                            % Weighted um of squared differences
             ss = Inf;
             try                                                             % compute fitted trajectories
-                solution = obj.system.integrate(b, obj.data, obj.data.t_data);
+                solution = obj.system.integrate(beta, obj.data, obj.data.t_data);
                 solution = solution(:, obj.data.observed, :);               % sum of squares on observed states
                 ss = sum((solution - obj.data.traces).^2 ./ mean(obj.data.traces, [1 3]).^2, 'all');
                                                                             % add prior term (if any)
-                ss = ss + (b' - obj.settings.prior.mean)' * (obj.settings.prior.prec * obj.settings.prior.mult) ...
-                                                          * (b' - obj.settings.prior.mean);
+                ss = ss + (beta' - obj.settings.prior.mean)' * (obj.settings.prior.prec * obj.settings.prior.mult) ...
+                                                          * (beta' - obj.settings.prior.mean);
             catch ME
                 disp(ME)
             end
@@ -179,7 +169,7 @@ classdef FirstStage < handle
         end
         
         
-        function extract_estimates(obj)                                 % Extract results 
+        function save_estimates(obj)                                    % Extract results 
             obj.integrate(true);                                            % compute fitted cell trajectories
             obj.data.beta_fs = obj.beta_fs;                                 % store results
             obj.data.beta_fs_history = obj.beta_fs_history;
@@ -243,7 +233,7 @@ classdef FirstStage < handle
         end
 
 
-        function covariances_full_beta(obj, rep)                        % Parameter uncertainties for full observation
+        function uncertainties_beta(obj, rep)                           % Parameter uncertainties for full observation
             indices_t = 2:obj.T-1;                                          % time indices without interval ends
             indices_tk = reshape(indices_t' + obj.T*(0:obj.system.K-1), 1, []); % across states
             indices_2tk = reshape(indices_tk' + [0 obj.system.K*obj.T], 1, []); % across state and gradient components

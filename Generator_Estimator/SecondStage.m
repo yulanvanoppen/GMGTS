@@ -90,6 +90,7 @@ classdef SecondStage < handle
 
         
         function extract_estimates(obj)                                 % Collect final estimates and predictions
+            obj.data.t_fine = linspace(obj.data.t(1), obj.data.t(end), 81);
             obj.data.precision = obj.precision;
             if obj.settings.lognormal
                 obj.data.beta_ss = exp(obj.beta(:, :, end));

@@ -16,12 +16,13 @@ noise_level = .1;
 seed = 1;
 
 generator = Generator(system ...                                            % generator setup
-                      , 'N', 10 ...                                        % number of cells
+                      , 'N', 500 ...                                        % number of cells
                       , 't', unique([0 5 10 20 dt:dt:200]) ...              % time grid
                       , 'error_std', noise_level ...                        % std of lognormal multiplicative errors
                       , 'D_mult', .25 ...                                   % covariance matrix s.t. D = diag(D_mult*beta)^2
                       , 'observed', first_obs:system.K ...                  % observed states labels (or indices)
-                      );
+                      , 'lognormal', true ...
+                  );
 
 rng(seed);
 [data, ground_truth] = generator.generate();
@@ -38,9 +39,10 @@ methods = [methods "GMGTS"];
 estimator = Estimator(system, data ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'MaxIterationsFS', 50 ...
-                      , 'ConvergenceTolFS', 1e-12 ...
-                      , 'TestConvergence', true ...
+                      ...%, 'MaxIterationsFS', 50 ...
+                      ...%, 'ConvergenceTolFS', 1e-12 ...
+                      ...%, 'TestConvergence', true ...
+                      , 'LogNormal', true ...
                       );
 
 estimator.estimate();

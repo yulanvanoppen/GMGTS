@@ -9,14 +9,12 @@ classdef SecondStageGTS < handle
         tol                                                                 % desired error tolerance
         
         T                                                                   % number of time points
-        K                                                                   % system dimension
         L                                                                   % number of observed states
         N                                                                   % population size
-        P                                                                   % parameter vector length
         
-        precision                                                           % asymptotic precision estimate
-        beta_cells                                                          % cell-specific parameter iterations
-        beta_mean                                                           % population parameter iterations
+        precision                                                           % cell parameter FS precision estimates
+        beta                                                                % cell-specific parameter iterations
+        b                                                                   % population parameter iterations
         D                                                                   % random effect covariance iterations
     end
     
@@ -32,101 +30,99 @@ classdef SecondStageGTS < handle
     end
     
     methods
-        function obj = SecondStageGTS(data, system, settings)           % Constructor
+        function obj = SecondStage(data, system, settings)              % Constructor
             obj.data = data;
             obj.system = system;
             obj.settings = settings;
             
-            obj.varying = data.varying;
-            
-            [obj.T, obj.L, obj.N] = size(obj.data.traces);
-            obj.K = system.K;
-            obj.P = system.P;
-            
-            obj.beta_cells = data.beta_fs;
-            obj.beta_mean = mean(data.beta_fs);
-            obj.D = cov(data.beta_fs(:, obj.varying));
+            obj.beta = data.beta_fs;                                        % initial estimates from first stage results
+            if settings.lognormal
+                obj.beta = data.beta_lnorm;
+            end                           
+%             obj.beta = data.beta_fs(obj.data.converged, :);
+            obj.b = mean(obj.beta);                                         % sample mean and covariance
+            obj.D = cov(obj.beta);
         end
         
 
-        function output = optimize(obj)                                 % Main optimization function
-            obj.estimate_precisions();                                      % approximate first-stage precisions
+                                                                        % Main optimization function
+        function output = optimize(obj)                                     % invert uncertainty estimates
+            obj.estimate_precisions();                                      % correcting for near-zero variances
             
-            for rep = 1:obj.settings.nrep
-                certain = diag(obj.D(:, :, rep)) < 1e-7;                    % inversion of possibly singular matrix
-                Dinv_rep = zeros(size(obj.D(:, :, rep)));
-                Dinv_rep(~certain, ~certain) = inv(obj.D(~certain, ~certain, rep));
-                Dinv_rep(certain, certain) = diag(Inf(1, sum(certain)));
-                
+            for iter = 1:obj.settings.niter
+                fixed = diag(obj.D(:, :, iter)) < max(diag(obj.D(:, :, iter))) / 1e6;
+                Dinv_iter = zeros(size(obj.D(:, :, iter)));                 % invert current estimate of D
+                Dinv_iter(~fixed, ~fixed) = svdinv(obj.D(~fixed, ~fixed, iter));
+                Dinv_iter(fixed, fixed) = diag(Inf(1, sum(fixed)));
                                                                             % iterate until convergence:
-                obj.E_step(rep, Dinv_rep)                                   %   - refine cell-specific estimates
-                obj.M_step(rep, Dinv_rep)                                   %   - refine population estimates and covariances
+                obj.E_step(iter, Dinv_iter)                                 % - refine cell-specific estimates
+                obj.M_step(iter, Dinv_iter)                                 % - refine population estimates and covariances
                 
-                                                                            % break upon convergence
-                if eucl_rel(obj.beta_mean(rep, :), obj.beta_mean(rep+1, :)) < obj.settings.tol && ...
-                   eucl_rel(obj.D(:, :, rep), obj.D(:, :, rep+1), true) < obj.settings.tol
-                    break
+                if eucl_rel(obj.b(iter, :), obj.b(iter+1, :)) < obj.settings.tol && ...
+                   eucl_rel(obj.D(:, :, iter), obj.D(:, :, iter+1), true) < obj.settings.tol
+                    break                                                   % break at convergence tolerance
                 end
             end
             
-            fprintf('\n')
-            obj.extract_estimates();                                        % collect final estimates in obj.data
-            output = obj.data;                                              % and return
+            obj.extract_estimates();                                        % compute final predictions
+            output = obj.data;                                              % return data struct extended with results
         end
         
 
-        function E_step(obj, rep, Dinv_rep)                             % Expectation step of EM algorithm
-            beta_rep = obj.beta_mean(rep, obj.varying)';                    % abbreviate for clarity
-            obj.beta_cells(:, :, rep+1) = obj.beta_cells(:, :, rep);        % copy to retain non-varying parameters
-
-            for i = 1:obj.N
-                init_i = obj.beta_cells(i, obj.varying, 1)';                % cell i's initial beta and Ci^-1
+        function E_step(obj, iter, Dinv_iter)                           % Expectation step of EM algorithm
+            b_iter = obj.b(iter, :)';
+            for i = 1:obj.data.N
+                beta_fs_i = obj.beta(i, :, 1)';
                 Cinv_i = obj.precision(:, :, i);
                 
-                certain = isinf(diag(Cinv_i)) | isinf(diag(Dinv_rep));      % update estimate
-                obj.beta_cells(i, obj.varying(certain), rep+1) = init_i(certain);
-                obj.beta_cells(i, obj.varying(~certain), rep+1) = ((Cinv_i(~certain, ~certain) ...
-                                                                    + Dinv_rep(~certain, ~certain)) ...
-                                                                 \ (Cinv_i(~certain, ~certain) * init_i(~certain) ...
-                                                                    + Dinv_rep(~certain, ~certain) * beta_rep(~certain)))';
+                fixed = isinf(diag(Cinv_i)) | isinf(diag(Dinv_iter));       % manually set for near-zero variability
+                obj.beta(i, fixed, iter+1) = beta_fs_i(fixed);              % update estimate
+                obj.beta(i, ~fixed, iter+1) = ((Cinv_i(~fixed, ~fixed) ...
+                                                     + Dinv_iter(~fixed, ~fixed)) ...
+                                                    \ (Cinv_i(~fixed, ~fixed) * beta_fs_i(~fixed) ...
+                                                       + Dinv_iter(~fixed, ~fixed) * b_iter(~fixed)))';
             end
         end
 
 
-        function M_step(obj, rep, Dinv_rep)                             % Maximization step of EM algorithm
+        function M_step(obj, iter, Dinv_iter)                           % Maximization step of EM algorithm
             warning('off','MATLAB:singularMatrix')
+            
+            obj.b(iter+1, :) = mean(obj.beta(:, :, iter+1));                % update parameter mean
+            b_iter = obj.b(iter+1, :)';
 
-            obj.beta_mean(rep+1, :) = obj.beta_mean(rep, :);                % update population parameters and abbreviate
-            obj.beta_mean(rep+1, :) = mean(obj.beta_cells(:, :, rep+1));
-            beta_rep = obj.beta_mean(rep+1, obj.varying)';
-                                                                            % collect terms of D
-            summands = zeros(length(obj.varying), length(obj.varying), obj.N);
-            for i = 1:obj.N
-                beta_i = obj.beta_cells(i, obj.varying, rep+1)';            % abbreviate cell i's (current) beta and C^-1
+            summands = zeros(obj.system.P, obj.system.P, obj.data.N);       % collect terms of D
+            for i = 1:obj.data.N
+                beta_i = obj.beta(i, :, iter+1)';
                 Cinv_i = obj.precision(:, :, i);
                 
-                certain = isinf(diag(Cinv_i)) | isinf(diag(Dinv_rep));      % inversion of possibly singular matrix
-                cov_term = zeros(size(Dinv_rep));
-                cov_term(~certain, ~certain) = inv(Cinv_i(~certain, ~certain) + Dinv_rep(~certain, ~certain));
+                fixed = isinf(diag(Cinv_i)) | isinf(diag(Dinv_iter));
+                cov_term = zeros(size(Dinv_iter));                          % manually set for near-zero variability
+                cov_term(~fixed, ~fixed) = svdinv(Cinv_i(~fixed, ~fixed) + Dinv_iter(~fixed, ~fixed));
                 
-                summands(:, :, i) = cov_term + (beta_i - beta_rep) * (beta_i - beta_rep)';
+                summands(:, :, i) = cov_term + (beta_i - b_iter) * (beta_i - b_iter)';
             end
-
-            obj.D(:, :, rep+1) = mean(summands, 3);                         % update D
+            
+            obj.D(:, :, iter+1) = mean(summands, 3);                        % update D
             warning('on')
         end
 
 
-        function extract_estimates(obj)                                 % Extract results
+        function extract_estimates(obj)                                 % Collect final estimates and predictions
             obj.data.precision = obj.precision;
-            
-            obj.data.beta_est = obj.beta_cells(:, :, end);                  % collect final estimates
-            obj.data.b_est = obj.beta_mean(end, :);
-            obj.data.D_NTS = obj.D(:, :, 1);
-            obj.data.D_GTS = obj.D(:, :, end);
-                                                                            % predictions (cell-specific + population)
-            obj.data.fitted2 = obj.system.integrate(obj.data.beta_est, obj.data);
-            obj.data.population = obj.system.integrate(obj.data.b_est, obj.data);
+            if obj.settings.lognormal
+                obj.data.beta_ss = exp(obj.beta(:, :, end));
+                obj.data.b_est = obj.b(end, :);                             % parameter population mean trajectory
+                obj.data.population = obj.system.integrate(exp(obj.data.b_est), obj.data, obj.data.t_fine);
+            else
+                obj.data.beta_ss = max(0, obj.beta(:, :, end));             % cell parametes
+                obj.data.b_est = max(0, obj.b(end, :));                     % population means
+                obj.data.population = obj.system.integrate(obj.data.b_est, obj.data, obj.data.t_fine);
+            end
+            obj.data.D_est = obj.D(:, :, end);                              % random effect covariance
+            obj.data.lognormal = obj.settings.lognormal;
+                                                                            % fitted trajectories for empirical Bayes estimators
+            obj.data.fitted2 = obj.system.integrate(obj.data.beta_ss, obj.data, obj.data.t_fine);
         end
         
         
