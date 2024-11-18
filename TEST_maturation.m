@@ -3,10 +3,10 @@
 clearvars
 close all
 
-% model =  'model_maturation_onestep.txt';
-% system = ODEIQM(model, 'FixedParameters', ["kr" "kdr" "kdil" "d"]);
-% 
-% save('system_maturation_delay.mat', 'system')
+model =  'model_maturation_onestep.txt';
+system = ODEIQM(model, 'FixedParameters', ["kr" "kdr" "kdil" "d"]);
+
+save('system_maturation_delay.mat', 'system')
 
 load('system_maturation_delay.mat')
 
@@ -16,7 +16,7 @@ noise_level = .1;
 seed = 1;
 
 generator = Generator(system ...                                            % generator setup
-                      , 'N', 100 ...                                        % number of cells
+                      , 'N', 1000 ...                                        % number of cells
                       , 't', unique([0 5 10 20 dt:dt:200]) ...              % time grid
                       , 'error_std', noise_level ...                        % std of lognormal multiplicative errors
                       , 'D_mult', .25 ...                                   % covariance matrix s.t. D = diag(D_mult*beta)^2
@@ -34,7 +34,7 @@ rng(seed);
 
 methods = [];
 methods = [methods "GMGTS"];
-methods = [methods "GTS"];
+% methods = [methods "GTS"];
 
 estimator = Estimator(system, data ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
@@ -47,8 +47,8 @@ estimator = Estimator(system, data ...                                      % es
 
 estimator.estimate();
 
-close all
-plot(estimator, 'True', ground_truth ...
-     , 'States', 1:6 ...
-     , 'MaxCells', 7)
+% close all
+% plot(estimator, 'True', ground_truth ...
+%      , 'States', 1:6 ...
+%      , 'MaxCells', 7)
 

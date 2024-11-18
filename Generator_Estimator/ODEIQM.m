@@ -221,11 +221,12 @@ classdef ODEIQM < handle
             
             for l = 1:obj.K                                                 
                 g = matlabFunction(g_symb(l, :), 'Vars', [x; t]);           % create vectorized matlabFunction
-                g = @(states, times) g(states{:}, times{:});                % store for each state separately 
-                obj.g_cell{l} = @(states, times) g(mat2cell(states, size(states, 1), ...
-                                                            ones(1, obj.K), size(states, 3)), ...
-                                                   mat2cell(repmat(reshape(times, [], 1), 1, 1, size(states, 3)), ...
-                                                            numel(times), 1, size(states, 3)));
+                g = @(states, times) g(states{:}, times);                   % store for each state separately 
+%                 obj.g_cell{l} = @(states, times) g(mat2cell(states, size(states, 1), ...
+%                                                             ones(1, obj.K), size(states, 3)), ...
+%                                                    repmat(reshape(times, [], 1), 1, 1, size(states, 3)));
+                obj.g_cell{l} = @(states, times) g(obj.deal_states(states), ...
+                                                   obj.deal_times(times, size(states, 3)));
                 
                 dg = jacobian(reshape(g_symb, [], 1), x(l));                % create vectorized Jacobian as with g
                 dg_vectorized = dg;
@@ -257,11 +258,9 @@ classdef ODEIQM < handle
                     end
                 end
                 dh_symb = matlabFunction(dh_vectorized, 'Vars', [x; t]);
-                dh_symb = @(states, times) dh_symb(states{:}, times{:});
-                obj.dh_cell{l} = @(states, times) dh_symb(mat2cell(states, size(states, 1), ...
-                                                                   ones(1, obj.K), size(states, 3)), ...
-                                                          mat2cell(repmat(reshape(times, [], 1), 1, 1, size(states, 3)), ...
-                                                                   numel(times), 1, size(states, 3)));
+                dh_symb = @(states, times) dh_symb(states{:}, times);
+                obj.dh_cell{l} = @(states, times) dh_symb(obj.deal_states(states), ...
+                                                          obj.deal_times(times, size(states, 3)));
             end
             
             for n = 1:numel(h_symb)                                         % fix zero and constant entries
@@ -273,11 +272,9 @@ classdef ODEIQM < handle
             end
             
             h_symb = matlabFunction(permute(h_symb, [2 1]), 'Vars', [x; t]);% vectorize analogously
-            h_symb = @(states, times) h_symb(states{:}, times{:});
-            obj.h_handle = @(states, times) h_symb(mat2cell(states, size(states, 1), ...
-                                                            ones(1, obj.K), size(states, 3)), ...
-                                                   mat2cell(repmat(reshape(times, [], 1), 1, 1, size(states, 3)), ...
-                                                            numel(times), 1, size(states, 3)));
+            h_symb = @(states, times) h_symb(states{:}, times);
+            obj.h_handle = @(states, times) h_symb(obj.deal_states(states), ...
+                                                   obj.deal_times(times, size(states, 3)));
         end
         
         
@@ -301,6 +298,15 @@ classdef ODEIQM < handle
                        mat2cell(repmat(permute(parameters, [3 2 1]), size(states, 1), 1, 1), ...
                                 size(states, 1), ones(1, obj.P), size(parameters, 1)));
             end
+        end
+
+        function cell_states = deal_states(obj, states)
+            cell_states = cell(1, obj.K);
+            for k = 1:obj.K, cell_states{k} = states(:, k, :); end
+        end
+
+        function out = deal_times(~, times, N)
+            out = repmat(reshape(times, [], 1), 1, 1, N);
         end
     end
 end
