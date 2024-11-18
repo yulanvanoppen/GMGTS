@@ -16,7 +16,7 @@ noise_level = .05;
 seed = 1;
 
 generator = Generator(system ...                                            % generator setup
-                      , 'N', 100 ...                                        % number of cells
+                      , 'N', 1000 ...                                        % number of cells
                       , 't', unique([0 2.5 5 dt:dt:100]) ...                % time grid
                       , 'error_std', noise_level ...                        % std of lognormal multiplicative errors
                       , 'D_mult', .25 ...                                   % variance scale
@@ -37,7 +37,9 @@ methods = [methods "GMGTS"];
 estimator = Estimator(system, data ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'LogNormal', true ...
+                      , 'MaxIterationsFS', 5 ...
+                      , 'ConvergenceTolFS', 1e-12 ...
+                      , 'Knots', [0 2.5 40] ...
                   );
 
 estimator.estimate();

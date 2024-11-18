@@ -360,7 +360,7 @@ classdef ConvTest < handle
             
             for i = obj.N                                                   % estimated measurement error variances
                 S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
-                var_delta = svdinv(Z' * (S \ Z));                           % spline coefficient uncertainty
+                var_delta = tryinv(Z' * (S \ Z));                           % spline coefficient uncertainty
                 var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
                 
                 df = zeros(obj.system.K * obj.T);                           % residual covariance approximation
@@ -396,20 +396,20 @@ classdef ConvTest < handle
             
             for i = 1:obj.N                                                 % estimated measurement error variances
                 S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
-                var_delta = svdinv(Z' * (S \ Z));                           % spline coefficient uncertainty
+                var_delta = tryinv(Z' * (S \ Z));                           % spline coefficient uncertainty
                 var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
                 
                 dX = reshape(obj.data.dsmoothed(indices_t, :, i), [], 1);   % left-hand side
-                H = reshape(h_all(indices_t, :, i), [], 1);             % constant part wrt parameters
+                H = reshape(h_all(indices_t, :, i), [], 1);                 % constant part wrt parameters
                 G = g_all(indices_tk, :, i);                                % linear part wrt parameters
 
                 Vinv = zeros(obj.system.K * obj.T);                         % inverse residual covariance matrix estimate
-                Vinv(indices_tk, indices_tk) = svdinv(obj.V(indices_tk, indices_tk, i));
+                Vinv(indices_tk, indices_tk) = tryinv(obj.V(indices_tk, indices_tk, i));
                 
                                                                             % construct d[beta]/d[dX] and d[beta]/d[X]
                                                                             % cf. section "S6 First-stage uncertainty estimates for fully observed systems"
                 Th = G' * Vinv(indices_tk, indices_tk) * G + obj.settings.prior.prec;
-                Thinv = svdinv(Th);
+                Thinv = tryinv(Th);
                 dbeta_ddX = Thinv * G' * Vinv(indices_tk, indices_tk);      % partial with respect to dX
                 
                 Xi = G' * Vinv(indices_tk, indices_tk) * (dX - H) + obj.settings.prior.prec * obj.settings.prior.mean;
@@ -485,10 +485,10 @@ classdef ConvTest < handle
 
                 if rep == 1                                                 % smoothing covariance
                     S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
-                    var_delta = svdinv(Z' * (S \ Z));
+                    var_delta = tryinv(Z' * (S \ Z));
                     var_XOdXO = [Z_fs; dZ_fs] * var_delta * [Z_fs; dZ_fs]';
 
-                    obj.varbeta(:, :, i) = .5^2 * diag(obj.beta_fs(i, :).^2);   % initial (large) parameter uncertainty
+                    obj.varbeta(:, :, i) = diag(obj.beta_fs(i, :).^2);      % initial (large) parameter uncertainty
                     var_XdXint = [dF_dbeta; df_dbeta] * obj.varbeta(:, :, i) * [dF_dbeta; df_dbeta]';
 
                     var_XdX = zeros(2 * obj.system.K * obj.T);              % full state/gradient covariance
@@ -504,12 +504,12 @@ classdef ConvTest < handle
                     G = g_all(indices_tk, :, i);                            % linear part wrt parameters
                     
                     Vinv = zeros(obj.system.K * obj.T);                     % inverse residual covariance matrix estimate
-                    Vinv(indices_tk, indices_tk) = svdinv(obj.V(indices_tk, indices_tk, i));
+                    Vinv(indices_tk, indices_tk) = tryinv(obj.V(indices_tk, indices_tk, i));
                     
                                                                             % construct d[beta]/d[dX] and d[beta]/d[X]
                                                                             % cf. section "S6 First-stage uncertainty estimates for fully observed systems"
                     Th = G' * Vinv(indices_tk, indices_tk) * G + obj.settings.prior.prec;
-                    Thinv = svdinv(Th);
+                    Thinv = tryinv(Th);
                     dbeta_ddX = Thinv * G' * Vinv(indices_tk, indices_tk);  % partial with respect to dX
 
                     Xi = G' * Vinv(indices_tk, indices_tk) * (dX - H) + obj.settings.prior.prec * obj.settings.prior.mean;

@@ -184,7 +184,7 @@ classdef FirstStageGTS < handle
                                                       1, 1, obj.T, obj.L);  % inner products
                 gradient2 = pagemtimes(scaled_gradient, 'none', scaled_gradient, 'transpose');
                 precision = sum(gradient2(:, :, :, :), [3 4]);              % sum across time points and states
-                obj.varbeta(:, :, i) = svdinv(precision);
+                obj.varbeta(:, :, i) = tryinv(precision);
             end
         end
     end

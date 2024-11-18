@@ -11,17 +11,17 @@ close all
 load('system_maturation_delay.mat')
 
 first_obs = 2;
-dt = 5;
+dt = 20;
 noise_level = .1;
 seed = 1;
 
 generator = Generator(system ...                                            % generator setup
-                      , 'N', 500 ...                                        % number of cells
+                      , 'N', 100 ...                                        % number of cells
                       , 't', unique([0 5 10 20 dt:dt:200]) ...              % time grid
                       , 'error_std', noise_level ...                        % std of lognormal multiplicative errors
                       , 'D_mult', .25 ...                                   % covariance matrix s.t. D = diag(D_mult*beta)^2
                       , 'observed', first_obs:system.K ...                  % observed states labels (or indices)
-                      , 'lognormal', true ...
+                      ...%, 'lognormal', true ...
                   );
 
 rng(seed);
@@ -34,15 +34,15 @@ rng(seed);
 
 methods = [];
 methods = [methods "GMGTS"];
-% methods = [methods "GTS"];
+methods = [methods "GTS"];
 
 estimator = Estimator(system, data ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      ...%, 'MaxIterationsFS', 50 ...
+                      ...%, 'MaxIterationsFS', 5 ...
                       ...%, 'ConvergenceTolFS', 1e-12 ...
                       ...%, 'TestConvergence', true ...
-                      , 'LogNormal', true ...
+                      ...%, 'LogNormal', true ...
                       );
 
 estimator.estimate();

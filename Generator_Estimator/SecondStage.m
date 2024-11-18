@@ -33,7 +33,7 @@ classdef SecondStage < handle
             for iter = 1:obj.settings.niter
                 fixed = diag(obj.D(:, :, iter)) < max(diag(obj.D(:, :, iter))) / 1e6;
                 Dinv_iter = zeros(size(obj.D(:, :, iter)));                 % invert current estimate of D
-                Dinv_iter(~fixed, ~fixed) = svdinv(obj.D(~fixed, ~fixed, iter));
+                Dinv_iter(~fixed, ~fixed) = tryinv(obj.D(~fixed, ~fixed, iter));
                 Dinv_iter(fixed, fixed) = diag(Inf(1, sum(fixed)));
                                                                             % iterate until convergence:
                 obj.E_step(iter, Dinv_iter)                                 % - refine cell-specific estimates
@@ -79,7 +79,7 @@ classdef SecondStage < handle
                 
                 fixed = isinf(diag(Cinv_i)) | isinf(diag(Dinv_iter));
                 cov_term = zeros(size(Dinv_iter));                          % manually set for near-zero variability
-                cov_term(~fixed, ~fixed) = svdinv(Cinv_i(~fixed, ~fixed) + Dinv_iter(~fixed, ~fixed));
+                cov_term(~fixed, ~fixed) = tryinv(Cinv_i(~fixed, ~fixed) + Dinv_iter(~fixed, ~fixed));
                 
                 summands(:, :, i) = cov_term + (beta_i - b_iter) * (beta_i - b_iter)';
             end
@@ -116,7 +116,7 @@ classdef SecondStage < handle
                 end
                 
                 fixed = diag(covariance) < max(diag(covariance)) / 1e6;     % manual correction for near-zero uncertainty
-                obj.precision(~fixed, ~fixed, i) = svdinv(covariance(~fixed, ~fixed));
+                obj.precision(~fixed, ~fixed, i) = tryinv(covariance(~fixed, ~fixed));
                 obj.precision(fixed, fixed, i) = diag(Inf(1, sum(fixed)));
             end
         end

@@ -222,7 +222,7 @@ classdef Estimator < handle
             optindices = 1:length(obj.data.t);                              % time point indices to restrict opt to
             
             obj.GTS_settings.fs = struct('lb', obj.lb, 'ub', obj.ub, 'optindices', optindices, ...
-                                         'niter', obj.niterFS, 'tol', obj.tolSS, ...
+                                         'niter', obj.niterFS, 'tol', obj.tolFS, ...
                                          'nstart', obj.nmultistart, 'prior', obj.prior, ...
                                          'lognormal', obj.lognormal);
             obj.GTS_settings.ss = struct('niter', obj.niterSS, 'tol', obj.tolSS, ...
@@ -239,6 +239,8 @@ classdef Estimator < handle
         
         
         function estimate_GMGTS(obj, silent)
+            ws = warning('error', 'MATLAB:nearlySingularMatrix');
+            
             obj.GMGTS_smoother = Smoother(obj.data, obj.system, obj.GMGTS_settings.sm);
             obj.results_GMGTS = obj.GMGTS_smoother.smooth();
             toc_sm_GMGTS = obj.results_GMGTS.toc_sm;
@@ -269,6 +271,8 @@ classdef Estimator < handle
                 obj.GMGTS_conv_test = ConvTest(obj.results_GMGTS, obj.system, obj.GMGTS_settings.fs);
                 obj.results_GMGTS = obj.GMGTS_conv_test.estimate();
             end
+            
+            warning(ws);
         end
         
         
@@ -844,7 +848,7 @@ classdef Estimator < handle
             p = zeros(size(x, 1), 1);
             for i = 1:n
                 p(i) = (2*pi)^(-d/2) * det(S)^-1 * prod(x(i, :)) ...
-                                     * exp(-.5 * (log(x(i, :))-m) * inv(S) * (log(x(i, :))-m)');
+                                     * exp(-.5 * (log(x(i, :))-m) * tryinv(S) * (log(x(i, :))-m)');
             end
         end
     end

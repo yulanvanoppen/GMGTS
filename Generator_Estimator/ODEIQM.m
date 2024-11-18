@@ -19,6 +19,7 @@ classdef ODEIQM < handle
         parameters                                                          % parameters
         parameters_variable                                                 % parameters excluding fixed
         fixed_indices                                                       % fixed parameter indices
+        variable_indices
         x0                                                                  % model initial conditions
         k0                                                                  % model initial parameters
     end
@@ -62,7 +63,7 @@ classdef ODEIQM < handle
             
             traces = zeros(length(t), obj.K, nseries);
             for cell = 1:nseries                                            % substitute cell-specific parameters
-                full_parameters(~ismember(1:length(obj.parameters), obj.fixed_indices)) = parameters(cell, :);
+                full_parameters(obj.variable_indices) = parameters(cell, :);
                 out = obj.MEXf(t, settings.init(cell, :), ...               % fast integration using MEXmodel
                                full_parameters, options);
                 traces(:, :, cell) = out.statevalues;                       % save integrated states
@@ -170,6 +171,7 @@ classdef ODEIQM < handle
             obj.parameters = string(obj.parameters);
             [~, obj.fixed_indices] = ismember(obj.fixed.names, obj.parameters);
             obj.fixed_indices = obj.fixed_indices(obj.fixed_indices ~= 0);
+            obj.variable_indices = ~ismember(1:length(obj.parameters), obj.fixed_indices);
             
             [f, t, x, beta] = obj.construct_symbolic(f);
             obj.construct_linear_decomposition(f, t, x, beta);

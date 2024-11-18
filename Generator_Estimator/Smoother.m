@@ -123,7 +123,7 @@ classdef Smoother < handle
             for i = 1:obj.N                                                 % W: correcting weights from variances
                 for k = states                                              % penalty: lambda * L2(spline basis/coefficients)
                     W = diag(max(obj.variances_sm(:, k, i), 1e-7).^-1);     % delta_ik: LS estimate
-                    obj.delta{k}(:, i) = svdinv(obj.B{k} * W * obj.B{k}') * obj.B{k} * W * obj.data.traces(:, k, i);
+                    obj.delta{k}(:, i) = obj.B{k} * W * obj.B{k}' \ (obj.B{k} * W * obj.data.traces(:, k, i));
                 end
             end
         end

@@ -39,8 +39,8 @@ classdef FirstStage < handle
             obj.convergence_steps = ones(1, obj.N);                         % ensure no cells are considered converged
             obj.not_converged = 1:obj.N;
             
+            obj.initialize()                                                % numerically optimize population average
             if obj.L < system.K
-                obj.initialize()                                            % numerically optimize population average
                 obj.integrate(settings.niter == 0)                          % save solution if 'converged'
             end
         end
@@ -65,7 +65,7 @@ classdef FirstStage < handle
 
                 if iter > 1 && obj.L < obj.system.K, obj.integrate; end     % ODE integration
                 obj.estimate_covariances(iter);                             % residual covariance estimation
-                obj.update_parameters(iter);                                % gradient matching
+                obj.update_parameters();                                    % gradient matching
                 obj.beta_fs_history(:, :, iter) = obj.beta_fs;              % record past iterations
 
                 if obj.system.P > 1                                         % compute relative iteration steps
@@ -116,7 +116,7 @@ classdef FirstStage < handle
         end
             
         
-        function update_parameters(obj, iter)                           % Update (cell-specific) parameter estimates
+        function update_parameters(obj)                                 % Update (cell-specific) parameter estimates
             for i = obj.not_converged                                       % model slopes from splines and integrations
                 design = obj.system.g(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
                 const = obj.system.h(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
@@ -127,13 +127,8 @@ classdef FirstStage < handle
                 variances = obj.V(nonzero_ind, nonzero_ind, i);
                 weights = reshape(sqrt(obj.settings.weights(2:end-1, :)), [], 1);
                 variances = variances ./ weights ./ weights';
-                
-                if iter == 1 && obj.L == obj.system.K                       % omit starting point for full observation
-                    initial = [];                                           % on the first iteration
-                else
-                    initial = obj.beta_fs(i, :);
-                end                                                         % constrained GLS using quadratic programming
-                obj.beta_fs(i, :) = Optimization.QPGLS(design, response, variances, initial, ...
+                                                                            % constrained GLS using quadratic programming
+                obj.beta_fs(i, :) = Optimization.QPGLS(design, response, variances, obj.beta_fs(i, :), ...
                                                         obj.settings.lb, obj.settings.ub, obj.settings.prior);
             end
         end
@@ -215,7 +210,7 @@ classdef FirstStage < handle
             
             for i = obj.not_converged                                       % estimated measurement error variances
                 S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
-                var_delta = svdinv(Z' * (S \ Z));                           % spline coefficient uncertainty
+                var_delta = tryinv(Z' * (S \ Z));                           % spline coefficient uncertainty
                 var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
                 
                 df = zeros(obj.system.K * obj.T);                           % residual covariance approximation
@@ -251,20 +246,20 @@ classdef FirstStage < handle
             
             for i = 1:obj.N                                                 % estimated measurement error variances
                 S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
-                var_delta = svdinv(Z' * (S \ Z));                           % spline coefficient uncertainty
+                var_delta = tryinv(Z' * (S \ Z));                           % spline coefficient uncertainty
                 var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
                 
                 dX = reshape(obj.data.dsmoothed(indices_t, :, i), [], 1);   % left-hand side
-                H = reshape(h_all(indices_t, :, i), [], 1);             % constant part wrt parameters
+                H = reshape(h_all(indices_t, :, i), [], 1);                 % constant part wrt parameters
                 G = g_all(indices_tk, :, i);                                % linear part wrt parameters
 
                 Vinv = zeros(obj.system.K * obj.T);                         % inverse residual covariance matrix estimate
-                Vinv(indices_tk, indices_tk) = svdinv(obj.V(indices_tk, indices_tk, i));
+                Vinv(indices_tk, indices_tk) = tryinv(obj.V(indices_tk, indices_tk, i));
                 
                                                                             % construct d[beta]/d[dX] and d[beta]/d[X]
                                                                             % cf. section "S6 First-stage uncertainty estimates for fully observed systems"
                 Th = G' * Vinv(indices_tk, indices_tk) * G + obj.settings.prior.prec;
-                Thinv = svdinv(Th);
+                Thinv = tryinv(Th);
                 dbeta_ddX = Thinv * G' * Vinv(indices_tk, indices_tk);      % partial with respect to dX
                 
                 Xi = G' * Vinv(indices_tk, indices_tk) * (dX - H) + obj.settings.prior.prec * obj.settings.prior.mean;
@@ -313,22 +308,17 @@ classdef FirstStage < handle
             end
                                                                             % RHS Jacobian for each cell from smoothed measurements
             df_dX_all = obj.system.df(obj.smoothed_fitted, obj.data.t, obj.beta_fs);
-
+            
             beta_permuted = permute(obj.beta_fs, [3 2 1]);                  % vectorized finite difference approximations
             epsilon = max(1e-8, beta_permuted * .001);                      % of solution and RHS parameter sensitivities
             beta_pm_eps = beta_permuted + epsilon .* kron([1; -1], eye(obj.system.P));
-
-            traces_pm_eps = zeros(obj.T, obj.system.K, obj.system.P, 2, obj.N);
-            for i = cells
-                for p = 1:obj.system.P                                      % numerically integrate at parameter component pm eps
-                    traces_pm_eps(:, :, p, 1, i) = obj.system.integrate(beta_pm_eps(p, :, i), obj.data, obj.data.t, 1e-4);
-                    traces_pm_eps(:, :, p, 2, i) = obj.system.integrate(beta_pm_eps(p+end/2, :, i), obj.data, obj.data.t, 1e-4);
-                end
-            end
-                                                                            % restructure for rhs evaluations
             beta_pm_eps = reshape(permute(beta_pm_eps, [2 1 3]), obj.system.P, [])';
+
+                                                                            % compute permuted traces and rhs evaluations
+            traces_pm_eps = obj.system.integrate(beta_pm_eps, obj.data, obj.data.t, 1e-4);
+            traces_pm_eps = reshape(traces_pm_eps, obj.T, obj.system.K, obj.system.P, 2, obj.N);
             gradients_pm_eps = reshape(obj.system.rhs(reshape(traces_pm_eps, obj.T, obj.system.K, []), obj.data.t, ...
-                                                    beta_pm_eps), obj.T, obj.system.K, obj.system.P, 2, []);
+                                                    beta_pm_eps), obj.T, obj.system.K, obj.system.P, 2, obj.N);
 
             eps_denom = 1./reshape(2*epsilon, 1, 1, obj.system.P, 1, obj.N);% finite difference approximations
             dF_dbeta_all = permute((traces_pm_eps(:, :, :, 1, :) - traces_pm_eps(:, :, :, 2, :)) .* eps_denom, [1:3 5 4]);
@@ -340,31 +330,32 @@ classdef FirstStage < handle
 
                 if rep == 1                                                 % smoothing covariance
                     S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
-                    var_delta = svdinv(Z' * (S \ Z));
+                    var_delta = tryinv(Z' * (S \ Z));
                     var_XOdXO = [Z_fs; dZ_fs] * var_delta * [Z_fs; dZ_fs]';
 
-                    obj.varbeta(:, :, i) = .5^2 * diag(obj.beta_fs(i, :).^2);   % initial (large) parameter uncertainty
+                    obj.varbeta(:, :, i) = diag(obj.beta_fs(i, :).^2);      % initial (large) parameter uncertainty
                     var_XdXint = [dF_dbeta; df_dbeta] * obj.varbeta(:, :, i) * [dF_dbeta; df_dbeta]';
 
                     var_XdX = zeros(2 * obj.system.K * obj.T);              % full state/gradient covariance
                     var_XdX(ind_obs + [0 end/2], ind_obs + [0 end/2]) = var_XOdXO;
                     var_XdX(ind_hid + [0 end/2], ind_hid + [0 end/2]) = var_XdXint(ind_hid + [0 end/2], ...
                                                                                        ind_hid + [0 end/2]);
+                    
                     obj.varXdX(indices_2tk, indices_2tk, i) = var_XdX(indices_2tk, indices_2tk);
 
                 else
                                                                             % left-hand side
                     dX = reshape(obj.dsmoothed_fitted(indices_t, :, i), [], 1);
-                    H = reshape(h_all(indices_t, :, i), [], 1);            % constant part wrt parameters
+                    H = reshape(h_all(indices_t, :, i), [], 1);             % constant part wrt parameters
                     G = g_all(indices_tk, :, i);                            % linear part wrt parameters
                     
                     Vinv = zeros(obj.system.K * obj.T);                     % inverse residual covariance matrix estimate
-                    Vinv(indices_tk, indices_tk) = svdinv(obj.V(indices_tk, indices_tk, i));
+                    Vinv(indices_tk, indices_tk) = tryinv(obj.V(indices_tk, indices_tk, i));
                     
                                                                             % construct d[beta]/d[dX] and d[beta]/d[X]
                                                                             % cf. section "S6 First-stage uncertainty estimates for fully observed systems"
                     Th = G' * Vinv(indices_tk, indices_tk) * G + obj.settings.prior.prec;
-                    Thinv = svdinv(Th);
+                    Thinv = tryinv(Th);
                     dbeta_ddX = Thinv * G' * Vinv(indices_tk, indices_tk);  % partial with respect to dX
 
                     Xi = G' * Vinv(indices_tk, indices_tk) * (dX - H) + obj.settings.prior.prec * obj.settings.prior.mean;

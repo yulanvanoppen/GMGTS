@@ -22,7 +22,7 @@ generator = Generator(system ...                                            % ge
                       , 'error_std', .05 ...                               % std of lognormal multiplicative errors
                       , 'D', D ...                                   % variance scale
                       , 'observed', observed ...             % observed states labels (or indices)
-                      , 'lognormal', true ...
+                      ...%, 'lognormal', true ...
                       );
 
 rng(seed);
@@ -34,17 +34,17 @@ rng(seed);
 
 methods = [];
 methods = [methods "GMGTS"];
-% methods = [methods "GTS"];
+methods = [methods "GTS"];
 
 estimator = Estimator(system, data ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'LogNormal', true ...
+                      ...%, 'LogNormal', true ...
                       );
 
 estimator.estimate();
 
-% close all
+close all
 plot(estimator, 'True', ground_truth ...
      , 'States', 1:9 ...
      , 'MaxCells', 7)

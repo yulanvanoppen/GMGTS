@@ -3,18 +3,21 @@
 clearvars
 close all
 
-% model =  'model_generalizedLV2.txt';
+P = 8;
+name = sprintf('model_generalizedLV%d', P);
+
+% model = [name '.txt'];
 % system = ODEIQM(model, 'FixedParameters', strcat('r', string(1:16)));
-% save('system_generalizedLV2.mat', 'system')
+% save([name '.mat'], 'system')
 
-load('system_generalizedLV2.mat')
+load([name '.mat'])
 
-first_obs = 10;
+first_obs = 5;
 noise_level = .05;
 seed = 1;
 
 generator = Generator(system ...                                            % generator setup
-                      , 'N', 10 ...                                         % number of cells
+                      , 'N', 100 ...                                         % number of cells
                       , 't', 0:20 ...                                       % time grid
                       , 'error_std', noise_level ...                        % std of lognormal multiplicative errors
                       , 'D_mult', .25 ...                                   % covariance matrix s.t. D = diag(D_mult*beta)^2
@@ -36,9 +39,9 @@ methods = [methods "GMGTS"];
 estimator = Estimator(system, data ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
                       , 'Methods', methods ...                              % GMGT, GTS, or both
-                      , 'MaxIterationsFS', 50 ...
-                      , 'ConvergenceTolFS', 1e-12 ...
-                      , 'TestConvergence', true ...
+                      ...%, 'MaxIterationsFS', 50 ...
+                      ...%, 'ConvergenceTolFS', 1e-12 ...
+                      ...%, 'TestConvergence', true ...
                       );
 
 estimator.estimate();
