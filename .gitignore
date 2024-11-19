@@ -1,4 +1,6 @@
 *.mexw64
 *.asv
 *.mat
+*.fig
+*.png
 simulation/
