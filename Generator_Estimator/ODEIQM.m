@@ -102,55 +102,55 @@ classdef ODEIQM < handle
         end
         
         
-        function result = df(obj, states, times, parameters)
+        function result = df(obj, states, times, parameters)            % Evaluate RHS Jacobian from saved function handles
             assert(size(states, 2) == obj.K)
             assert(size(states, 1) == numel(times))
             assert(size(parameters, 2) == obj.P)
             result = cell(obj.K, 1);
-            for k = 1:obj.K
+            for k = 1:obj.K                                                 % collect evaluations per partial derivative
                 result{k} = obj.df_cell{k}(states, times, parameters);
             end
-            result = vertcat(result{:});
+            result = vertcat(result{:});                                    % stack vertically in K (TxKxN-dimensional) blocks 
         end
         
         
-        function result = g(obj, states, times)
+        function result = g(obj, states, times)                         % Evaluate RHS matrix factor from saved function handles
             assert(size(states, 2) == obj.K)
             assert(size(states, 1) == numel(times))
             result = cell(obj.K, 1);
-            for k = 1:obj.K
+            for k = 1:obj.K                                                 % collect evaluations per state component
                 result{k} = obj.g_cell{k}(states, times);
             end
-            result = vertcat(result{:});
+            result = vertcat(result{:});                                    % stack vertically in K (TxPxN-dimensional) blocks 
         end
         
         
-        function result = dg(obj, states, times)
+        function result = dg(obj, states, times)                        % Evaluate matrix factor Jacobian from saved function handles
             assert(size(states, 2) == obj.K)
             assert(size(states, 1) == numel(times))
             result = cell(obj.K, 1);
-            for k = 1:obj.K
+            for k = 1:obj.K                                                 % collect evaluations per partial derivative
                 result{k} = obj.dg_cell{k}(states, times);
-            end
-            result = permute(cat(5, result{:}), [1 2 3 5 4]);
+            end                                                             % concatenate partial derivatives along 4th dimension
+            result = permute(cat(5, result{:}), [1 2 3 5 4]);               % in K (KxPxTx1xN-dimensional) blocks
         end
         
         
-        function result = h(obj, states, times)
+        function result = h(obj, states, times)                         % Evaluate RHS constant factor from saved function handle
             assert(size(states, 2) == obj.K)
             assert(size(states, 1) == numel(times))
-            result = obj.h_handle(states, times);
+            result = obj.h_handle(states, times);                           % same shape as 'states' input
         end
         
         
-        function result = dh(obj, states, times)
+        function result = dh(obj, states, times)                        % Evaluate constant factor Jacobian from saved function handles
             assert(size(states, 2) == obj.K)
             assert(size(states, 1) == numel(times))
             result = cell(obj.K, 1);
-            for k = 1:obj.K
+            for k = 1:obj.K                                                 % collect evaluations per partial derivative
                 result{k} = obj.dh_cell{k}(states, times);
             end
-            result = horzcat(result{:});
+            result = horzcat(result{:});                                    % stack vertically in K (TxKxN-dimensional) blocks 
         end
         
         
@@ -221,14 +221,11 @@ classdef ODEIQM < handle
             
             for l = 1:obj.K                                                 
                 g = matlabFunction(g_symb(l, :), 'Vars', [x; t]);           % create vectorized matlabFunction
-                g = @(states, times) g(states{:}, times);                   % store for each state separately 
-%                 obj.g_cell{l} = @(states, times) g(mat2cell(states, size(states, 1), ...
-%                                                             ones(1, obj.K), size(states, 3)), ...
-%                                                    repmat(reshape(times, [], 1), 1, 1, size(states, 3)));
+                g = @(states, times) g(states{:}, times);
                 obj.g_cell{l} = @(states, times) g(obj.deal_states(states), ...
                                                    obj.deal_times(times, size(states, 3)));
                 
-                dg = jacobian(reshape(g_symb, [], 1), x(l));                % create vectorized Jacobian as with g
+                dg = jacobian(flatten(g_symb), x(l));                       % create vectorized Jacobian as with g
                 dg_vectorized = dg;
                 for n = 1:numel(dg_vectorized)
                     if dg_vectorized(n) == 0
@@ -238,13 +235,9 @@ classdef ODEIQM < handle
                     end
                 end
                 dg = matlabFunction(dg_vectorized, 'Vars', [x; t]);
-                dg = @(states, times) dg(states{:}, times{:});              % elaborate restructuring
-                dg = @(states, times) dg(mat2cell(permute(reshape(permute(states, [2 1 3]), ...
-                                                                  obj.K, 1, size(states, 1), ...
-                                                                  size(states, 3)), [2 1 3 4]), ...
-                                                  1, ones(1, obj.K), size(states, 1), size(states, 3)), ...
-                                         mat2cell(repmat(reshape(times, 1, 1, []), 1, 1, 1, size(states, 3)), ...
-                                                  1, 1, numel(times), size(states, 3)));
+                dg = @(states, times) dg(states{:}, times);
+                dg = @(states, times) dg(obj.deal_states_dg(states), ...
+                                         obj.deal_times_dg(times, size(states, 3)));
                 obj.dg_cell{l} = @(states, times) reshape(dg(states, times), obj.K, obj.P, ...
                                                           size(states, 1), size(states, 3));
                                                       
@@ -289,24 +282,45 @@ classdef ODEIQM < handle
             end
             for l = 1:obj.K
                 df = matlabFunction(df_symb(l, :), 'Vars', [x; t; beta]);   % vectorized matlabFunction
-                df = @(states, times, parameters) df(states{:}, times{:}, parameters{:});
-                obj.df_cell{l} = @(states, times, parameters) ...
-                    df(mat2cell(states, size(states, 1), ...
-                                ones(1, obj.K), size(states, 3)), ...
-                       mat2cell(repmat(reshape(times, [], 1), 1, 1, size(states, 3)), ...
-                                numel(times), 1, size(states, 3)), ...
-                       mat2cell(repmat(permute(parameters, [3 2 1]), size(states, 1), 1, 1), ...
-                                size(states, 1), ones(1, obj.P), size(parameters, 1)));
+                df = @(states, times, parameters) df(states{:}, times, parameters{:});
+                obj.df_cell{l} = @(states, times, parameters) df(obj.deal_states(states), ...
+                                                                 obj.deal_times(times, size(states, 3)), ...
+                                                                 obj.deal_parameters(parameters, size(states, 1)));
             end
         end
 
-        function cell_states = deal_states(obj, states)
+        
+        function cell_states = deal_states(obj, states)                 % Create cells along state dimension
             cell_states = cell(1, obj.K);
             for k = 1:obj.K, cell_states{k} = states(:, k, :); end
         end
 
-        function out = deal_times(~, times, N)
-            out = repmat(reshape(times, [], 1), 1, 1, N);
+        
+        function rep_times = deal_times(~, times, N)                    % Repeat time points for each cell
+            rep_times = repmat(flatten(times), 1, 1, N);
+        end
+        
+        
+        function cell_parameters = deal_parameters(obj, parameters, T)  % Create cells along parameter component dimension
+            rep_parameters = repmat(permute(parameters, [3 2 1]), T, 1, 1); % repeat for each time point
+            
+            cell_parameters = cell(1, obj.P);
+            for p = 1:obj.P, cell_parameters{p} = rep_parameters(:, p, :); end
+        end
+        
+        
+        function cell_states = deal_states_dg(obj, states)              % Additionally remove time from first dimension
+            [T, ~, N] = size(states);
+            transposed = permute(states, [2 1 3]);
+            reshaped = reshape(transposed, 1, obj.K, T, N);
+            
+            cell_states = cell(1, obj.K);
+            for k = 1:obj.K, cell_states{k} = reshaped(:, k, :, :); end
+        end
+
+        
+        function rep_times = deal_times_dg(~, times, N)                 % Repetition along 3rd dimension
+            rep_times = repmat(reshape(times, 1, 1, []), 1, 1, 1, N);
         end
     end
 end

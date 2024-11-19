@@ -4,8 +4,8 @@ function d = eucl_rel(x, y, ~)
             x = cell2mat(x);
             y = cell2mat(y);
         end
-        x = reshape(x, [], 1);
-        y = reshape(y, [], 1);
+        x = flatten(x);
+        y = flatten(y);
     end
     
     d = norm(x - y) / norm(x);

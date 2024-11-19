@@ -52,7 +52,7 @@ classdef ConvTest < handle
 %             for x = 1:3
 %                 for y = x+1:4
 %                     nexttile(x + (y-2)*3)
-%                     plot(reshape(obj.data.beta_fs_history(1, x, :), [], 1), reshape(obj.data.beta_fs_history(1, y, :), [], 1), 'o-')
+%                     plot(flatten(obj.data.beta_fs_history(1, x, :)), flatten(obj.data.beta_fs_history(1, y, :)), 'o-')
 %                     xlabel(obj.system.parameters_variable(x))
 %                     ylabel(obj.system.parameters_variable(y))
 %                 end
@@ -297,8 +297,8 @@ classdef ConvTest < handle
         end
         
         
-        function update_parameters(obj, iter)                           % Update (cell-specific) parameter estimates
-            for i = 1:obj.N                                                 % model slopes from splines and integrations
+        function update_parameters(obj)                                 % Update (cell-specific) parameter estimates
+            for i = obj.not_converged                                       % model slopes from splines and integrations
                 design = obj.system.g(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
                 const = obj.system.h(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
                 response = obj.dsmoothed_fitted(2:end-1, :, i) - const;     % spline and integration slopes
@@ -306,15 +306,10 @@ classdef ConvTest < handle
                                                                             % disregard interval ends
                 nonzero_ind = reshape((2:obj.T-1)' + obj.T*(0:obj.system.K-1), 1, []);
                 variances = obj.V(nonzero_ind, nonzero_ind, i);
-                weights = reshape(sqrt(obj.settings.weights(2:end-1, :)), [], 1);
+                weights = flatten(sqrt(obj.settings.weights(2:end-1, :)));
                 variances = variances ./ weights ./ weights';
-                
-                if iter == 1 && obj.L == obj.system.K                       % omit starting point for full observation
-                    initial = [];                                           % on the first iteration
-                else
-                    initial = obj.beta_fs(i, :);
-                end                                                         % constrained GLS using quadratic programming
-                obj.beta_fs(i, :) = Optimization.QPGLS(design, response, variances, initial, ...
+                                                                            % constrained GLS using quadratic programming
+                obj.beta_fs(i, :) = Optimization.QPGLS(design, response, variances, obj.beta_fs(i, :), ...
                                                         obj.settings.lb, obj.settings.ub, obj.settings.prior);
             end
         end
@@ -324,7 +319,7 @@ classdef ConvTest < handle
             if nargin < 3, converged = false; end 
             
             if obj.L == obj.system.K
-                obj.covariances_full;                                       % full observation
+                obj.covariances_full();                                     % full observation
             else
                 obj.covariances_partial(rep, converged);                    % partial observation
             end
@@ -358,7 +353,7 @@ classdef ConvTest < handle
                                                                             % RHS Jacobian for each cell from smoothed measurements
             df_dX_all = obj.system.df(obj.data.smoothed, obj.data.t, obj.beta_fs);
             
-            for i = obj.N                                                   % estimated measurement error variances
+            for i = 1:obj.N                                                 % estimated measurement error variances
                 S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
                 var_delta = tryinv(Z' * (S \ Z));                           % spline coefficient uncertainty
                 var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
@@ -378,7 +373,7 @@ classdef ConvTest < handle
         end
 
 
-        function covariances_full_beta(obj, rep)                        % Parameter uncertainties for full observation
+        function uncertainties_beta(obj, rep)                           % Parameter uncertainties for full observation
             indices_t = 2:obj.T-1;                                          % time indices without interval ends
             indices_tk = reshape(indices_t' + obj.T*(0:obj.system.K-1), 1, []); % across states
             indices_2tk = reshape(indices_tk' + [0 obj.system.K*obj.T], 1, []); % across state and gradient components
@@ -399,8 +394,8 @@ classdef ConvTest < handle
                 var_delta = tryinv(Z' * (S \ Z));                           % spline coefficient uncertainty
                 var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
                 
-                dX = reshape(obj.data.dsmoothed(indices_t, :, i), [], 1);   % left-hand side
-                H = reshape(h_all(indices_t, :, i), [], 1);                 % constant part wrt parameters
+                dX = flatten(obj.data.dsmoothed(indices_t, :, i));          % left-hand side
+                H = flatten(h_all(indices_t, :, i));                        % constant part wrt parameters
                 G = g_all(indices_tk, :, i);                                % linear part wrt parameters
 
                 Vinv = zeros(obj.system.K * obj.T);                         % inverse residual covariance matrix estimate
@@ -438,8 +433,8 @@ classdef ConvTest < handle
             cells = 1:obj.N;
 
             hidden = setdiff(1:obj.system.K, obj.data.observed);            % hidden/observed state/time indices
-            ind_hid = reshape((1:obj.T)'+(obj.T*(hidden-1)), [], 1);
-            ind_obs = reshape((1:obj.T)'+(obj.T*(obj.data.observed-1)), [], 1);
+            ind_hid = flatten((1:obj.T)'+(obj.T*(hidden-1)));
+            ind_obs = flatten((1:obj.T)'+(obj.T*(obj.data.observed-1)));
             
             indices_t = 2:obj.T-1;                                          % time indices without interval ends
             indices_tk = reshape(indices_t' + obj.T*(0:obj.system.K-1), 1, []); % across states
@@ -458,22 +453,17 @@ classdef ConvTest < handle
             end
                                                                             % RHS Jacobian for each cell from smoothed measurements
             df_dX_all = obj.system.df(obj.smoothed_fitted, obj.data.t, obj.beta_fs);
-
+            
             beta_permuted = permute(obj.beta_fs, [3 2 1]);                  % vectorized finite difference approximations
             epsilon = max(1e-8, beta_permuted * .001);                      % of solution and RHS parameter sensitivities
             beta_pm_eps = beta_permuted + epsilon .* kron([1; -1], eye(obj.system.P));
-
-            traces_pm_eps = zeros(obj.T, obj.system.K, obj.system.P, 2, obj.N);
-            for i = cells
-                for p = 1:obj.system.P                                      % numerically integrate at parameter component pm eps
-                    traces_pm_eps(:, :, p, 1, i) = obj.system.integrate(beta_pm_eps(p, :, i), obj.data, obj.data.t, 1e-4);
-                    traces_pm_eps(:, :, p, 2, i) = obj.system.integrate(beta_pm_eps(p+end/2, :, i), obj.data, obj.data.t, 1e-4);
-                end
-            end
-                                                                            % restructure for rhs evaluations
             beta_pm_eps = reshape(permute(beta_pm_eps, [2 1 3]), obj.system.P, [])';
+
+                                                                            % compute permuted traces and rhs evaluations
+            traces_pm_eps = obj.system.integrate(beta_pm_eps, obj.data, obj.data.t, 1e-4);
+            traces_pm_eps = reshape(traces_pm_eps, obj.T, obj.system.K, obj.system.P, 2, obj.N);
             gradients_pm_eps = reshape(obj.system.rhs(reshape(traces_pm_eps, obj.T, obj.system.K, []), obj.data.t, ...
-                                                    beta_pm_eps), obj.T, obj.system.K, obj.system.P, 2, []);
+                                                    beta_pm_eps), obj.T, obj.system.K, obj.system.P, 2, obj.N);
 
             eps_denom = 1./reshape(2*epsilon, 1, 1, obj.system.P, 1, obj.N);% finite difference approximations
             dF_dbeta_all = permute((traces_pm_eps(:, :, :, 1, :) - traces_pm_eps(:, :, :, 2, :)) .* eps_denom, [1:3 5 4]);
@@ -495,12 +485,12 @@ classdef ConvTest < handle
                     var_XdX(ind_obs + [0 end/2], ind_obs + [0 end/2]) = var_XOdXO;
                     var_XdX(ind_hid + [0 end/2], ind_hid + [0 end/2]) = var_XdXint(ind_hid + [0 end/2], ...
                                                                                        ind_hid + [0 end/2]);
+                    
                     obj.varXdX(indices_2tk, indices_2tk, i) = var_XdX(indices_2tk, indices_2tk);
 
                 else
-                                                                            % left-hand side
-                    dX = reshape(obj.dsmoothed_fitted(indices_t, :, i), [], 1);
-                    H = reshape(h_all(indices_t, :, i), [], 1);            % constant part wrt parameters
+                    dX = flatten(obj.dsmoothed_fitted(indices_t, :, i));    % left-hand side
+                    H = flatten(h_all(indices_t, :, i));                    % constant part wrt parameters
                     G = g_all(indices_tk, :, i);                            % linear part wrt parameters
                     
                     Vinv = zeros(obj.system.K * obj.T);                     % inverse residual covariance matrix estimate

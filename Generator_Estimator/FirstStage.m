@@ -125,7 +125,7 @@ classdef FirstStage < handle
                                                                             % disregard interval ends
                 nonzero_ind = reshape((2:obj.T-1)' + obj.T*(0:obj.system.K-1), 1, []);
                 variances = obj.V(nonzero_ind, nonzero_ind, i);
-                weights = reshape(sqrt(obj.settings.weights(2:end-1, :)), [], 1);
+                weights = flatten(sqrt(obj.settings.weights(2:end-1, :)));
                 variances = variances ./ weights ./ weights';
                                                                             % constrained GLS using quadratic programming
                 obj.beta_fs(i, :) = Optimization.QPGLS(design, response, variances, obj.beta_fs(i, :), ...
@@ -138,7 +138,7 @@ classdef FirstStage < handle
             if nargin < 3, converged = false; end 
             
             if obj.L == obj.system.K
-                obj.covariances_full;                                       % full observation
+                obj.covariances_full();                                     % full observation
             else
                 obj.covariances_partial(rep, converged);                    % partial observation
             end
@@ -249,8 +249,8 @@ classdef FirstStage < handle
                 var_delta = tryinv(Z' * (S \ Z));                           % spline coefficient uncertainty
                 var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
                 
-                dX = reshape(obj.data.dsmoothed(indices_t, :, i), [], 1);   % left-hand side
-                H = reshape(h_all(indices_t, :, i), [], 1);                 % constant part wrt parameters
+                dX = flatten(obj.data.dsmoothed(indices_t, :, i));          % left-hand side
+                H = flatten(h_all(indices_t, :, i));                        % constant part wrt parameters
                 G = g_all(indices_tk, :, i);                                % linear part wrt parameters
 
                 Vinv = zeros(obj.system.K * obj.T);                         % inverse residual covariance matrix estimate
@@ -288,8 +288,8 @@ classdef FirstStage < handle
             if converged, cells = 1:obj.N; else, cells = obj.not_converged; end
 
             hidden = setdiff(1:obj.system.K, obj.data.observed);            % hidden/observed state/time indices
-            ind_hid = reshape((1:obj.T)'+(obj.T*(hidden-1)), [], 1);
-            ind_obs = reshape((1:obj.T)'+(obj.T*(obj.data.observed-1)), [], 1);
+            ind_hid = flatten((1:obj.T)'+(obj.T*(hidden-1)));
+            ind_obs = flatten((1:obj.T)'+(obj.T*(obj.data.observed-1)));
             
             indices_t = 2:obj.T-1;                                          % time indices without interval ends
             indices_tk = reshape(indices_t' + obj.T*(0:obj.system.K-1), 1, []); % across states
@@ -344,9 +344,8 @@ classdef FirstStage < handle
                     obj.varXdX(indices_2tk, indices_2tk, i) = var_XdX(indices_2tk, indices_2tk);
 
                 else
-                                                                            % left-hand side
-                    dX = reshape(obj.dsmoothed_fitted(indices_t, :, i), [], 1);
-                    H = reshape(h_all(indices_t, :, i), [], 1);             % constant part wrt parameters
+                    dX = flatten(obj.dsmoothed_fitted(indices_t, :, i));    % left-hand side
+                    H = flatten(h_all(indices_t, :, i));                    % constant part wrt parameters
                     G = g_all(indices_tk, :, i);                            % linear part wrt parameters
                     
                     Vinv = zeros(obj.system.K * obj.T);                     % inverse residual covariance matrix estimate

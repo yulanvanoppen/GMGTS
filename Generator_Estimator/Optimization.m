@@ -1,10 +1,9 @@
 classdef Optimization < handle   
     
     properties (Constant)
-%         options_quadprog = optimoptions('quadprog', 'Algorithm', 'active-set', 'Display', 'off', 'OptimalityTolerance', 1e-3);
-        options_mpcActiveSet = mpcActiveSetOptions('double');
-%         options_mpcInteriorPoint = mpcInteriorPointOptions('double');
-        options_interiorpoint = optimoptions('fmincon', 'Display', 'off', 'OptimalityTolerance', 1e-3);
+        options_mpcActiveSet = struct('DataType', 'double', 'MaxIterations', 200, 'ConstraintTolerance', 1e-6, ...
+                                      'UseHessianAsInput', true, 'IntegrityChecks', false);
+        options_interiorpoint = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-7);
         options_initialization = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-2);
     end
     
@@ -17,7 +16,7 @@ classdef Optimization < handle
             if nargin <= 5, lb = zeros(1, P); ub = Inf(1, P); end
             precision = tryinv(covariance);
             
-            Y = reshape(response, [], 1);
+            Y = flatten(response);
             X = design;
             H = X' * precision * X + prior.prec;                            % quadratic programming problem
             H = (H+H')/2;                                                   % force symmetry
@@ -25,14 +24,12 @@ classdef Optimization < handle
             if any(f ~= real(f), 'all') || any(f ~= real(f))
                 disp(1)
             end
-                                                                            % solve
-%             opt = quadprog(H, f, [], [], [], [], lb, ub, x0, Optimization.options_quadprog)';
-            A = kron([-1; 1], eye(length(lb)));
+            
+            A = kron([-1; 1], eye(length(lb)));                             % bounds to inequality constraints
             b = [-lb ub]';
-            Aeq = zeros(0, length(lb));
-            beq = zeros(0, 1);
+            Aeq = zeros(0, length(lb));                                     % empty equality constraints
+            beq = zeros(0, 1);                                              % solve using active-set algorithm
             opt = mpcActiveSetSolver(H, f, A, b, Aeq, beq, false(2*length(lb), 1), Optimization.options_mpcActiveSet)';
-%             opt = mpcInteriorPointSolver(H, f, A, b, Aeq, beq, x0', Optimization.options_mpcInteriorPoint)';
         end
         
         

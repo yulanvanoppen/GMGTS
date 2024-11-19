@@ -186,14 +186,14 @@ classdef Estimator < handle
             obj.testconv = parser.Results.TestConvergence;
             obj.lognormal = parser.Results.LogNormal;
             obj.prior = parser.Results.Prior;
-            obj.prior.mean = reshape(obj.prior.mean, [], 1);
+            obj.prior.mean = flatten(obj.prior.mean);
             if isfield(obj.prior, 'cv')
-                obj.prior.cv = reshape(obj.prior.cv, [], 1);
+                obj.prior.cv = flatten(obj.prior.cv);
                 obj.prior.mean(obj.prior.mean == 0 & isinf(obj.prior.cv)) = 1;
                 obj.prior.sd = obj.prior.cv .* obj.prior.mean;
             end
             if isfield(obj.prior, 'sd')
-                obj.prior.sd = reshape(obj.prior.sd, [], 1);
+                obj.prior.sd = flatten(obj.prior.sd);
                 warning('off','MATLAB:singularMatrix')
                 obj.prior.prec = inv(diag(obj.prior.sd.^2));
                 warning('on','MATLAB:singularMatrix')
@@ -314,7 +314,7 @@ classdef Estimator < handle
                 var = @(trace) obj.GTS_first_stage.theta_fs(1) + obj.GTS_first_stage.theta_fs(2) * trace.^2;
             end
             
-            logfs = @(trace, i) reshape(sum(-1/2 * (obj.data.traces(:, :, i) - trace).^2 ./ var(trace) - 1/2 * log(var(trace)), [1 2]), [], 1);
+            logfs = @(trace, i) flatten(sum(-1/2 * (obj.data.traces(:, :, i) - trace).^2 ./ var(trace) - 1/2 * log(var(trace)), [1 2]));
             
             for rep = 1:nrep
                 fprintf('%d ', rep);
