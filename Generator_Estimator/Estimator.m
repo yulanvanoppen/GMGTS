@@ -74,6 +74,7 @@ classdef Estimator < handle
             default_Prior = struct('mean', 0, 'prec', 0);
             
             parser = inputParser;
+            parser.KeepUnmatched = true;
             addRequired(parser, 'system', @(x) isa(x, 'ODEIQM') || isstring(string(x)) && numel(string(x)) == 1);
             addRequired(parser, 'data', @(x) isstruct(x) || isnumeric(x) && ndims(x) == 3 && size(x, 1) > 1);
             addOptional(parser, 't', default_t, @(x) isnumeric(x) && numel(unique(x)) == data.T);
@@ -231,10 +232,45 @@ classdef Estimator < handle
         
         
         %% Estimation ------------------------------------------------------
-        function estimate(obj, silent)
+        function varargout = estimate(obj, silent)
             if nargin < 2, silent = false; else, silent = true; end
-            if ismember("GMGTS", obj.method), obj.estimate_GMGTS(silent); end
-            if ismember("GTS", obj.method), obj.estimate_GTS(silent); end
+            varargout = cell(1, 0);
+            idx = 1;
+            
+            if ismember("GMGTS", obj.method)
+                obj.estimate_GMGTS(silent);
+                
+                out = struct('t', obj.results_GMGTS.t_fine, 'smoothed', obj.results_GMGTS.smoothed_fine, ...
+                             'dsmoothed', obj.results_GMGTS.dsmoothed_fine);
+                if obj.stages >= 1
+                    out.fitted = obj.results_GMGTS.fitted_fs_fine;
+                    out.dfitted = obj.results_GMGTS.fitted_fs_fine;
+                    out.beta = obj.results_GMGTS.beta_fs;
+                    out.uncertainties = obj.results_GMGTS.varbeta;
+                end
+                if obj.stages == 2
+                    out.b = obj.results_GMGTS.b_est;
+                    out.D = obj.results_GMGTS.D_est;
+                end
+                
+                varargout{idx} = out;
+                idx = idx + 1;
+            end
+            
+            if ismember("GTS", obj.method)
+                obj.estimate_GTS(silent);
+                
+                out = struct('t', obj.results_GTS.t_fine, 'smoothed', [], 'dsmoothed', [], ...
+                             'fitted', obj.results_GTS.fitted_fs_fine, ...
+                             'dfitted', obj.results_GTS.dfitted_fs_fine, 'beta', obj.results_GTS.beta_fs, ...
+                             'uncertainties',  obj.results_GTS.varbeta);
+                if obj.stages == 2
+                    out.b = obj.results_GTS.b_est;
+                    out.D = obj.results_GTS.D_est;
+                end
+                    
+                varargout{idx} = out;
+            end
         end
         
         

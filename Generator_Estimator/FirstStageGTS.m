@@ -132,12 +132,14 @@ classdef FirstStageGTS < handle
         
         
         function save_estimates(obj)                                    % Extract results 
-            obj.data.beta_fs = obj.beta_fs;                                 % store results
+            obj.data.beta_fs = obj.beta_fs;
             obj.data.fitted_fs = obj.fitted_fs;           
             obj.data.varbeta = obj.varbeta;
             obj.data.variances_fs = obj.variances_fs;
             obj.data.convergence_steps = obj.convergence_steps;
-            obj.data.converged = setdiff(1:obj.N, obj.not_converged);
+            obj.data.converged = setdiff(1:obj.N, obj.not_converged);       % integrate along finer time grid
+            obj.data.fitted_fs_fine = max(1e-12, obj.system.integrate(obj.beta_fs, obj.data, obj.data.t_fine));
+            obj.data.dfitted_fs_fine = obj.system.rhs(obj.data.fitted_fs_fine, obj.data.t_fine, obj.beta_fs);
             if obj.settings.lognormal, obj.lognormal_approximation(), end
         end
         

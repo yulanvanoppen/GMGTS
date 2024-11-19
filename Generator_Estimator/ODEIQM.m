@@ -31,7 +31,8 @@ classdef ODEIQM < handle
     
     methods
         function obj = ODEIQM(model_file, varargin)                     % Constructor
-            parser = inputParser();                                         
+            parser = inputParser;
+            parser.KeepUnmatched = true;                                         
             addRequired(parser, 'model_file', @(x) (ischar(x) || isstring(x)) ...
                                                    && endsWith(x, '.txt') );
             addParameter(parser, 'FixedParameters', string([]), @isstring); 
