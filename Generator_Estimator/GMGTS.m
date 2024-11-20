@@ -1,4 +1,4 @@
-function [estimates, estimator] = GMGTS(model_file, data, varargin)
+function [out, estimator] = GMGTS(model_file, data, varargin)
 %GMGTS is an algorithm to infer random effects distributions.
 %   GMGTS attempts to recover the distribution parameters b,D of a
 %   mixed-effects model
@@ -10,7 +10,7 @@ function [estimates, estimator] = GMGTS(model_file, data, varargin)
 %   GMGTS builds on the GTS framework, using gradient matching to obtain
 %   cell-specific estimates after smoothing the measurements.
 %
-%   estimates = GMGTS(model_file, data, ...) infers random effect
+%   out = GMGTS(model_file, data, ...) infers random effect
 %   distributions of the system specified in the IQM model_file
 %   (instructions for setting up the model file are given below) from
 %   measurements given in data. Here data is either a TxLxN-dimensional
@@ -21,26 +21,26 @@ function [estimates, estimator] = GMGTS(model_file, data, varargin)
 %   estimates beta, and predicted states. Additional arguments are passed
 %   to the System and Estimator constructors, see the details below.
 % 
-%   estimates = GMGTS(model_file, data, t, ...) assumes which the
+%   out = GMGTS(model_file, data, t, ...) assumes which the
 %   measurements were taken at time points t. If data is a struct, t is
 %   ignored and assumed to be a field of data.
 % 
-%   estimates = GMGTS(model_file, data, t, observed, ...) specifies the
+%   out = GMGTS(model_file, data, t, observed, ...) specifies the
 %   indices of the observables with respect to the system determined by
 %   model_file through observed. If data is a struct, observed is ignored
 %   and assumed to be a field of data.
 % 
-%   estimates = GMGTS(model_file, data, t, observed, init, ...) integrates
+%   out = GMGTS(model_file, data, t, observed, init, ...) integrates
 %   the ODE system from the initial values given in init to make state
 %   predictions. If data is a struct, init is ignored and assumed to be a
 %   field of data.
 %
-%   estimates = GMGTS(model_file, data, t, observed, init, 'Plot', false, ...)
+%   out = GMGTS(model_file, data, t, observed, init, 'Plot', false, ...)
 %   disables plots with parameter estimates, the inferred random effects 
 %   distribution, model predictions, and any smoothed measurements (enabled
 %   by default).
 % 
-%   [estimates, estimator] = GMGTS(model_file, data, ...) also returns the
+%   [out, estimator] = GMGTS(model_file, data, ...) also returns the
 %   instantiated Estimator object.
 %
 %   See also SYSTEM, ESTIMATOR.
@@ -58,9 +58,9 @@ function [estimates, estimator] = GMGTS(model_file, data, varargin)
     [outputs{:}] = estimator.estimate();                                    % collect estimates
     
     if length(estimator.method) == 1                                        % concatenate estimates if both GMGTS and GTS used
-        estimates = outputs{1};
+        out = outputs{1};
     else
-        estimates = [outputs{1} outputs{2}];
+        out = [outputs{1} outputs{2}];
     end
     
     if parser.Results.Plot, plot(estimator), end                            % plot if required
