@@ -11,6 +11,7 @@ classdef Estimator < handle
         
         lb                                                                  % parameter space lower bounds
         ub                                                                  % parameter space upper bounds
+        positive                                                            % logical for forced state positivity
         t_fs                                                                % first stage optimization grid (GMGTS)
         
         nmultistart                                                         % #starting points for first stage initialization
@@ -59,6 +60,7 @@ classdef Estimator < handle
             
             default_LB = .25 * initial;
             default_UB = 4 .* initial + .0001 * mean(initial);
+            default_PositiveStates = true;
             default_TimePoints = data.t(1) + (0:.1:1) * range(data.t);
             
             default_MaxIterationsSM = 20;
@@ -92,6 +94,7 @@ classdef Estimator < handle
 
             addParameter(parser, 'LB', default_LB, @(x) all(x < initial));
             addParameter(parser, 'UB', default_UB, @(x) all(x > initial));
+            addParameter(parser, 'PositiveStates', default_PositiveStates, @islogical);
             addParameter(parser, 'TimePoints', default_TimePoints, @(x) all(data.t(1) <= x & x <= data.t(end)));
             
             addParameter(parser, 'MaxIterationsSM', default_MaxIterationsSM, @isscalar);
@@ -175,6 +178,7 @@ classdef Estimator < handle
             
             obj.lb = parser.Results.LB;
             obj.ub = parser.Results.UB;
+            obj.positive = parser.Results.PositiveStates;
             obj.t_fs = sort(unique(parser.Results.TimePoints));
             obj.niterSM = max(1, round(parser.Results.MaxIterationsSM));
             obj.tolSM = max(1e-12, parser.Results.ConvergenceTolSM);
@@ -208,12 +212,12 @@ classdef Estimator < handle
             weights([1 end], :) = 0;
             
             obj.GMGTS_settings.sm = struct('order', 4, 'autoknots', obj.autoknots, 'knots', {obj.knots}, ...
-                                           't_fs', obj.t_fs, 'niter', obj.niterSM, 'tol', obj.tolSM, ...
-                                           'interactive', obj.interactive);
-            obj.GMGTS_settings.fs = struct('lb', obj.lb, 'ub', obj.ub, 't_fs', obj.t_fs, 'weights', weights, ...
-                                           'niter', obj.niterFS, 'tol', obj.tolFS, 'nstart', obj.nmultistart, ...
-                                           'lognormal', obj.lognormal, 'prior', obj.prior);
-            obj.GMGTS_settings.ss = struct('niter', obj.niterSS, 'tol', obj.tolSS, ...
+                                           'positive', obj.positive, 't_fs', obj.t_fs, 'niter', obj.niterSM, ...
+                                           'tol', obj.tolSM, 'interactive', obj.interactive);
+            obj.GMGTS_settings.fs = struct('lb', obj.lb, 'ub', obj.ub, 'positive', obj.positive, 't_fs', obj.t_fs, ...
+                                           'weights', weights, 'niter', obj.niterFS, 'tol', obj.tolFS, ...
+                                           'nstart', obj.nmultistart, 'lognormal', obj.lognormal, 'prior', obj.prior);
+            obj.GMGTS_settings.ss = struct('positive', obj.positive, 'niter', obj.niterSS, 'tol', obj.tolSS, ...
                                            'lognormal', obj.lognormal);
         end
         
@@ -223,10 +227,10 @@ classdef Estimator < handle
             optindices = 1:length(obj.data.t);                              % time point indices to restrict opt to
             
             obj.GTS_settings.fs = struct('lb', obj.lb, 'ub', obj.ub, 'optindices', optindices, ...
-                                         'niter', obj.niterFS, 'tol', obj.tolFS, ...
+                                         'positive', obj.positive, 'niter', obj.niterFS, 'tol', obj.tolFS, ...
                                          'nstart', obj.nmultistart, 'prior', obj.prior, ...
                                          'lognormal', obj.lognormal);
-            obj.GTS_settings.ss = struct('niter', obj.niterSS, 'tol', obj.tolSS, ...
+            obj.GTS_settings.ss = struct('positive', obj.positive, 'niter', obj.niterSS, 'tol', obj.tolSS, ...
                                          'lognormal', obj.lognormal);
         end
         
@@ -634,12 +638,12 @@ classdef Estimator < handle
             
             if ismember("GMGTS", obj.method)
                 obj.add_population_plot(obj.results_GMGTS.t_fine, obj.results_GMGTS.population, mean_label_GMGTS, ...
-                                        obj.results_GMGTS.fitted2, CI_label_GMGTS, ...
+                                        obj.results_GMGTS.fitted_ss, CI_label_GMGTS, ...
                                         plot_settings, legends, ':')
             end
             if ismember("GTS", obj.method)
                 obj.add_population_plot(obj.results_GTS.t_fine, obj.results_GTS.population, mean_label_GTS, ...
-                                        obj.results_GTS.fitted2, CI_label_GTS, ...
+                                        obj.results_GTS.fitted_ss, CI_label_GTS, ...
                                         plot_settings, legends, '-.')
             end
             if ~isempty(fieldnames(truth))

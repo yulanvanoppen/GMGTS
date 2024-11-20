@@ -90,7 +90,6 @@ classdef FirstStage < handle
                 end
             end
             
-            obj.beta_fs(obj.beta_fs < 1e-15) = 0;                           % polish final estimates
             obj.save_estimates();                                           % save estimates and fitted trajectories
             output = obj.data;                                              % return data appended with FS results
         end
@@ -150,7 +149,9 @@ classdef FirstStage < handle
             if nargin == 1, converged = false; end
             
             obj.fitted_fs = obj.system.integrate(obj.beta_fs, obj.data);    % integrate system and compute rhs
-            obj.fitted_fs = max(1e-12, obj.fitted_fs);                      % force positive
+            if obj.settings.positive
+                obj.fitted_fs = max(1e-12, obj.fitted_fs);                  % force positive
+            end
             obj.dfitted_fs = obj.system.rhs(obj.fitted_fs, obj.data.t, obj.beta_fs);
             unobserved = ~ismember(1:obj.system.K, obj.data.observed);      % replace unobserved states by ODE integrations
             
@@ -159,8 +160,11 @@ classdef FirstStage < handle
             obj.dsmoothed_fitted(:, unobserved, :) = obj.dfitted_fs(:, unobserved, :);
             
             if converged                                                    % store smooth versions upon convergence
-                obj.data.fitted_fs_fine = max(1e-12, obj.system.integrate(obj.beta_fs, obj.data, obj.data.t_fine));
+                obj.data.fitted_fs_fine = obj.system.integrate(obj.beta_fs, obj.data, obj.data.t_fine);
                 obj.data.dfitted_fs_fine = obj.system.rhs(obj.data.fitted_fs_fine, obj.data.t_fine, obj.beta_fs);
+                if obj.settings.positive
+                    obj.data.fitted_fs_fine = max(1e-12, obj.data.fitted_fs_fine);
+                end
             end
         end
         

@@ -167,8 +167,9 @@ classdef Smoother < handle
                     obj.data.dsmoothed_fine(:, k, i) = obj.dB_fine{k}' * obj.delta{k}(:, i) / range(obj.data.t);
                 end
             end
-            
-            obj.data.smoothed = max(obj.data.smoothed, 1e-12);              % clip nonpositive values
+            if obj.settings.positive
+                obj.data.smoothed = max(obj.data.smoothed, 1e-12);          % clip nonpositive values
+            end
         end
         
         

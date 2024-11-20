@@ -4,6 +4,7 @@ classdef SecondStage < handle
         system                                                              % nested object controlling the ODE system
         settings                                                            % hyperparameters and user input
         
+        cells                                                               % cell indices to consider
         precision                                                           % cell parameter FS precision estimates
         beta                                                                % cell-specific parameter iterations
         b                                                                   % population parameter iterations
@@ -16,7 +17,9 @@ classdef SecondStage < handle
             obj.data = data;
             obj.system = system;
             obj.settings = settings;
-            
+                                                                            % select 90% closest to convergence
+            obj.cells = find(obj.data.convergence_steps < quantile(obj.data.convergence_steps, .9));
+            obj.cells = 1:obj.data.N;
             obj.beta = data.beta_fs;                                        % initial estimates from first stage results
             if settings.lognormal
                 obj.beta = data.beta_lnorm;
@@ -52,7 +55,7 @@ classdef SecondStage < handle
         
         function E_step(obj, iter, Dinv_iter)                           % Expectation step of EM algorithm
             b_iter = obj.b(iter, :)';
-            for i = 1:obj.data.N
+            for i = obj.cells
                 beta_fs_i = obj.beta(i, :, 1)';
                 Cinv_i = obj.precision(:, :, i);
                 
@@ -73,7 +76,7 @@ classdef SecondStage < handle
             b_iter = obj.b(iter+1, :)';
 
             summands = zeros(obj.system.P, obj.system.P, obj.data.N);       % collect terms of D
-            for i = 1:obj.data.N
+            for i = obj.cells
                 beta_i = obj.beta(i, :, iter+1)';
                 Cinv_i = obj.precision(:, :, i);
                 
@@ -84,7 +87,7 @@ classdef SecondStage < handle
                 summands(:, :, i) = cov_term + (beta_i - b_iter) * (beta_i - b_iter)';
             end
             
-            obj.D(:, :, iter+1) = mean(summands, 3);                        % update D
+            obj.D(:, :, iter+1) = mean(summands(:, :, obj.cells), 3);        % update D
             warning('on')
         end
 
@@ -92,19 +95,22 @@ classdef SecondStage < handle
         function extract_estimates(obj)                                 % Collect final estimates and predictions
             obj.data.t_fine = linspace(obj.data.t(1), obj.data.t(end), 81);
             obj.data.precision = obj.precision;
+            obj.data.b_est = obj.b(end, :);                                 % population mean
             if obj.settings.lognormal
-                obj.data.beta_ss = exp(obj.beta(:, :, end));
-                obj.data.b_est = obj.b(end, :);                             % parameter population mean trajectory
+                obj.data.beta_ss = exp(obj.beta(obj.cells, :, end));        % parameter population mean trajectory
                 obj.data.population = obj.system.integrate(exp(obj.data.b_est), obj.data, obj.data.t_fine);
             else
-                obj.data.beta_ss = max(0, obj.beta(:, :, end));             % cell parametes
-                obj.data.b_est = max(0, obj.b(end, :));                     % population means
+                obj.data.beta_ss = obj.beta(obj.cells, :, end);
                 obj.data.population = obj.system.integrate(obj.data.b_est, obj.data, obj.data.t_fine);
             end
             obj.data.D_est = obj.D(:, :, end);                              % random effect covariance
             obj.data.lognormal = obj.settings.lognormal;
                                                                             % fitted trajectories for empirical Bayes estimators
-            obj.data.fitted2 = obj.system.integrate(obj.data.beta_ss, obj.data, obj.data.t_fine);
+            obj.data.fitted_ss = obj.system.integrate(obj.data.beta_ss, obj.data, obj.data.t_fine);
+            if obj.settings.positive
+                obj.data.population = max(1e-12, obj.data.population);
+                obj.data.fitted_ss = max(1e-12, obj.data.fitted_ss);
+            end
         end
         
         

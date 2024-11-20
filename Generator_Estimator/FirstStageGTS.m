@@ -66,7 +66,6 @@ classdef FirstStageGTS < handle
             
             obj.uncertainties_beta();                                       % compute estimate uncertainties
             
-            obj.beta_fs(obj.beta_fs < 1e-15) = 0;                           % polish final estimates
             obj.save_estimates();                                           % save estimates and fitted trajectories
             output = obj.data;                                              % return data appended with FS results                                        % return expanded data container
         end
@@ -85,6 +84,9 @@ classdef FirstStageGTS < handle
                 obj.beta_fs(i, :) = Optimization.least_squares(SS, obj.settings.lb, obj.settings.ub, 1, obj.beta_fs(i, :));
             end
             obj.fitted_fs = obj.system.integrate(obj.beta_fs, obj.data);    % compute predicted trajectories
+            if obj.settings.positive
+                obj.fitted_fs = max(1e-12, obj.fitted_fs);                  % force positive
+            end
         end
         
         
@@ -138,8 +140,11 @@ classdef FirstStageGTS < handle
             obj.data.variances_fs = obj.variances_fs;
             obj.data.convergence_steps = obj.convergence_steps;
             obj.data.converged = setdiff(1:obj.N, obj.not_converged);       % integrate along finer time grid
-            obj.data.fitted_fs_fine = max(1e-12, obj.system.integrate(obj.beta_fs, obj.data, obj.data.t_fine));
+            obj.data.fitted_fs_fine = obj.system.integrate(obj.beta_fs, obj.data, obj.data.t_fine);
             obj.data.dfitted_fs_fine = obj.system.rhs(obj.data.fitted_fs_fine, obj.data.t_fine, obj.beta_fs);
+            if obj.settings.positive
+                obj.data.fitted_fs_fine = max(1e-12, obj.data.fitted_fs_fine);
+            end
             if obj.settings.lognormal, obj.lognormal_approximation(), end
         end
         
