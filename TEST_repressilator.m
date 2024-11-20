@@ -11,6 +11,7 @@ close all
 load('system_repressilator.mat')
 
 observed = [1:3 7:9];
+% observed = 1:9;
 seed = 1;
 
 correlation = eye(6) + diag([.5 0 .5 0 .5], 1) + diag([.5 0 .5 0 .5], -1);
@@ -27,7 +28,7 @@ rng(seed);
 
 methods = [];
 methods = [methods "GMGTS"];
-methods = [methods "GTS"];
+% methods = [methods "GTS"];
 
 estimator = Estimator(system, data, Stages=2, Methods=methods,...
                       Knots=linspace(0, 100, 14));
@@ -40,15 +41,15 @@ GMGTS_est = estimator.results_GMGTS;
 GMGTS_hellinger = hedist(GMGTS_est.b_est, GMGTS_est.D_est, ground_truth.b, ground_truth.D);
 GMGTS_wasserstein = wsdist(GMGTS_est.b_est, GMGTS_est.D_est, ground_truth.b, ground_truth.D);
 
-GTS_est = estimator.results_GTS;
-GTS_hellinger = hedist(GTS_est.b_est, GTS_est.D_est, ground_truth.b, ground_truth.D);
-GTS_wasserstein = wsdist(GTS_est.b_est, GTS_est.D_est, ground_truth.b, ground_truth.D);
+% GTS_est = estimator.results_GTS;
+% GTS_hellinger = hedist(GTS_est.b_est, GTS_est.D_est, ground_truth.b, ground_truth.D);
+% GTS_wasserstein = wsdist(GTS_est.b_est, GTS_est.D_est, ground_truth.b, ground_truth.D);
 
 hellinger_GMGTS_GTS = [GMGTS_hellinger GTS_hellinger]
 wasserstein_GMGTS_GTS = [GMGTS_wasserstein GTS_wasserstein]
 
 close all
-plot(estimator, True=ground_truth, States=1:9, MaxCells=7)
+% plot(estimator, True=ground_truth, States=1:9, MaxCells=7)
 
 
 

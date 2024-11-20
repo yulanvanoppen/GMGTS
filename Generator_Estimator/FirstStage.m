@@ -32,6 +32,7 @@ classdef FirstStage < handle
             
             [obj.T, obj.L, obj.N] = size(data.smoothed);                    % extract from trajectory dimensions
             
+            obj.beta_fs = ones(obj.N, obj.system.P);
             obj.V = repmat(eye(system.K * obj.T), 1, 1, obj.N);
             obj.varXdX = zeros(2 * system.K * obj.T, 2 * system.K * obj.T, obj.N);
             obj.varbeta = repmat(eye(system.P), 1, 1, obj.N);
@@ -39,8 +40,8 @@ classdef FirstStage < handle
             obj.convergence_steps = ones(1, obj.N);                         % ensure no cells are considered converged
             obj.not_converged = 1:obj.N;
             
-            obj.initialize()                                                % numerically optimize population average
             if obj.L < system.K
+                obj.initialize()                                            % numerically optimize population average
                 obj.integrate(settings.niter == 0)                          % save solution if 'converged'
             end
         end
@@ -59,7 +60,7 @@ classdef FirstStage < handle
             
             if obj.settings.niter == 0, obj.estimate_covariances(1), end    % assume (premature) convergence
             
-            obj.beta_fs_history = zeros([size(obj.beta_fs) obj.settings.niter]);
+            obj.beta_fs_history = zeros(obj.N, obj.system.P, obj.settings.niter);
             for iter = 1:obj.settings.niter
                 beta_old = obj.beta_fs;
 
@@ -128,19 +129,19 @@ classdef FirstStage < handle
                 weights = flatten(sqrt(obj.settings.weights(2:end-1, :)));
                 variances = variances ./ weights ./ weights';
                                                                             % constrained GLS using quadratic programming
-                obj.beta_fs(i, :) = Optimization.QPGLS(design, response, variances, obj.beta_fs(i, :), ...
-                                                        obj.settings.lb, obj.settings.ub, obj.settings.prior);
+                obj.beta_fs(i, :) = Optimization.QPGLS(design, response, variances, obj.settings.lb, ...
+                                                        obj.settings.ub, obj.settings.prior);
             end
         end
         
                                         
-        function estimate_covariances(obj, rep, converged)              % Update error covariance function parameters
+        function estimate_covariances(obj, iter, converged)             % Update error covariance function parameters
             if nargin < 3, converged = false; end 
             
             if obj.L == obj.system.K
-                obj.covariances_full();                                     % full observation
+                if iter > 1, obj.covariances_full(), end                    % full observation
             else
-                obj.covariances_partial(rep, converged);                    % partial observation
+                obj.covariances_partial(iter, converged);                   % partial observation
             end
         end
         

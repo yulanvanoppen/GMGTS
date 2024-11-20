@@ -9,7 +9,7 @@ classdef Optimization < handle
     
 
     methods (Static)
-        function [opt, H] = QPGLS(design, response, covariance, x0, lb, ub, prior)
+        function [opt, H] = QPGLS(design, response, covariance, lb, ub, prior)
             if nargin < 7, prior = struct('mean', 0, 'prec', 0); end
 
             P = size(design, 2);                                            % number of parameters

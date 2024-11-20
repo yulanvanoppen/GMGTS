@@ -309,8 +309,8 @@ classdef ConvTest < handle
                 weights = flatten(sqrt(obj.settings.weights(2:end-1, :)));
                 variances = variances ./ weights ./ weights';
                                                                             % constrained GLS using quadratic programming
-                obj.beta_fs(i, :) = Optimization.QPGLS(design, response, variances, obj.beta_fs(i, :), ...
-                                                        obj.settings.lb, obj.settings.ub, obj.settings.prior);
+                obj.beta_fs(i, :) = Optimization.QPGLS(design, response, variances, obj.settings.lb, ...
+                                                        obj.settings.ub, obj.settings.prior);
             end
         end
         

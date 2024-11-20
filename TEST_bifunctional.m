@@ -10,7 +10,7 @@ close all
 
 load('system_bifunctional_measurable.mat')
 
-first_obs = 2;
+first_obs = 1;
 dt = 10;
 noise_level = .05;
 seed = 2;
@@ -26,7 +26,7 @@ rng(seed);
 
 methods = [];
 methods = [methods "GMGTS"];
-methods = [methods "GTS"];
+% methods = [methods "GTS"];
 
 estimator = Estimator(system, data, Stages=2, Methods=methods,...
                       Knots=[0 2.5 40]);
@@ -39,9 +39,9 @@ GMGTS_est = estimator.results_GMGTS;
 GMGTS_hellinger = hedist(GMGTS_est.b_est, GMGTS_est.D_est, ground_truth.b, ground_truth.D);
 GMGTS_wasserstein = wsdist(GMGTS_est.b_est, GMGTS_est.D_est, ground_truth.b, ground_truth.D);
 
-GTS_est = estimator.results_GTS;
-GTS_hellinger = hedist(GTS_est.b_est, GTS_est.D_est, ground_truth.b, ground_truth.D);
-GTS_wasserstein = wsdist(GTS_est.b_est, GTS_est.D_est, ground_truth.b, ground_truth.D);
+% GTS_est = estimator.results_GTS;
+% GTS_hellinger = hedist(GTS_est.b_est, GTS_est.D_est, ground_truth.b, ground_truth.D);
+% GTS_wasserstein = wsdist(GTS_est.b_est, GTS_est.D_est, ground_truth.b, ground_truth.D);
 
 hellinger_GMGTS_GTS = [GMGTS_hellinger GTS_hellinger];
 wasserstein_GMGTS_GTS = [GMGTS_wasserstein GTS_wasserstein];
