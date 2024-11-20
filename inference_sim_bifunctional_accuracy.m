@@ -5,7 +5,7 @@ close all
 
 name = 'bifunctional_TCS';
 model =  'model_bifunctional.txt';
-system = ODEIQM(name, model , 'FixedParameters', ["k1" "k2" "k4" "k6"]);
+system = System(name, model , 'FixedParameters', ["k1" "k2" "k4" "k6"]);
 
 % save('system_bifunctional_measurable.mat', 'system')
 

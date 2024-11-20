@@ -1,4 +1,4 @@
-classdef ODEIQM < handle
+classdef System < handle
     properties (Access = private)
         df_cell                                                             % raw jacobian handle
         g_cell                                                              % RHS: f(x; p) = g(x)⋅k + h(x)
@@ -30,7 +30,7 @@ classdef ODEIQM < handle
     
     
     methods
-        function obj = ODEIQM(model_file, varargin)                     % Constructor
+        function obj = System(model_file, varargin)                     % Constructor
             parser = inputParser;
             parser.KeepUnmatched = true;                                         
             addRequired(parser, 'model_file', @(x) (ischar(x) || isstring(x)) ...

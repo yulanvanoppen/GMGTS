@@ -4,7 +4,7 @@ close all
 
 name = 'repressilator';
 model =  'model_repressilator_full.txt';
-system = ODEIQM(name, model, 'FixedParameters', ["DNAT" "kf" "Kd" "m1" "p1"]);
+system = System(name, model, 'FixedParameters', ["DNAT" "kf" "Kd" "m1" "p1"]);
 
 save('system_repressilator.mat', 'system')
 

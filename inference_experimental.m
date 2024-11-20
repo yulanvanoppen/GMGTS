@@ -110,7 +110,7 @@ for idx = size(DATA, 2)
     if idx < 7, model = 'model_maturation_twostep.txt'; else, model = 'model_maturation_onestep.txt'; end
     disp(data(idx).name);
     
-    system = ODEIQM(model, 'FixedParameters', ["kr" "kdr" "kdil" "d"]);
+    system = System(model, 'FixedParameters', ["kr" "kdr" "kdil" "d"]);
     system.fixed.values(3) = data(idx).kdil;
     data(idx).init = system.x0' + 1e-6;
     data(idx).observed = system.K;
@@ -132,7 +132,7 @@ for idx = size(DATA, 2)
 % % % %     save(['estimates_experimental/'  data(idx).file(9:end-5) '.mat'])
     
 
-% % % % % % %     system = ODEIQM(model, 'FixedParameters', ["kr" "kdr" "kdil" "d" "km"]);
+% % % % % % %     system = System(model, 'FixedParameters', ["kr" "kdr" "kdil" "d" "km"]);
 % % % % % % %     system.fixed.values(end) = estimator.results_GMGTS.b_est(end);
 % % % % % % %     estimator = Estimator(system, data(idx) ...                             % estimator setup
 % % % % % % %                           , 'Stages', 2 ...                                 % 0: smoothing only, 1: first stage only

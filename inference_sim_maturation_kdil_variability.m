@@ -6,7 +6,7 @@ close all
 name = 'maturation_fluorescence'; 
 model =  'model_maturation_onestep.txt';
 % model =  'model_maturation_twostep.txt';
-system = ODEIQM(name, model, 'FixedParameters', ["kr" "kdr" "kdil" "d"]);
+system = System(name, model, 'FixedParameters', ["kr" "kdr" "kdil" "d"]);
 
 save('system_maturation.mat', 'system')
 
@@ -14,7 +14,7 @@ save('system_maturation.mat', 'system')
 name = 'maturation_fluorescence'; 
 model =  'model_maturation_onestep.txt';
 % model =  'model_maturation_twostep.txt';
-system = ODEIQM(name, model, 'FixedParameters', ["kr" "kdr" "d"]);
+system = System(name, model, 'FixedParameters', ["kr" "kdr" "d"]);
 
 save('system_maturation_variable.mat', 'system')
 

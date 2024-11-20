@@ -449,7 +449,8 @@ classdef Estimator < handle
             [states, ~, ind] = intersect(sort(plot_settings.States), obj.data.observed);
             n_cells = min(obj.data.N, plot_settings.MaxCells);
             
-            figure('position', [25, 55, 1740, 900])
+            screen = get(0, 'ScreenSize');
+            figure('position', [25, 55, min(1740, screen(3)-180), min(900, screen(4)-180)])
             tl = tiledlayout(2, length(states));
             title(tl, sprintf('Smoothing (%d/%d shown)', n_cells, obj.data.N))
             
@@ -506,7 +507,8 @@ classdef Estimator < handle
             states = sort(plot_settings.States);
             n_cells = min(obj.data.N, plot_settings.MaxCells);
             
-            figure('position', [40, 40, 1740, 900])
+            screen = get(0, 'ScreenSize');
+            figure('position', [40, 40, min(1740, screen(3)-180), min(900, screen(4)-180)])
             tl = tiledlayout(1 + any(obj.method == "GMGTS"), length(states));
             title(tl, sprintf('Fitted individual trajectories (%d/%d shown)', n_cells, obj.data.N))
             
@@ -604,7 +606,8 @@ classdef Estimator < handle
             states = sort(plot_settings.States);
             n_cells = min(obj.data.N, floor(plot_settings.MaxCells));
             
-            figure('position', [55, 25, 1740, 900])
+            screen = get(0, 'ScreenSize');
+            figure('position', [55, 25, min(1740, screen(3)-180), min(900, screen(4)-180)])
             tl = tiledlayout(1, length(states));
             title(tl, sprintf('Fitted population trajectories (%d/%d shown)', n_cells, obj.data.N))
             
@@ -685,7 +688,8 @@ classdef Estimator < handle
             [params, ~, ind] = intersect(sort(plot_settings.Parameters), 1:obj.system.P);
             n_params = length(params);
             
-            figure('position', [70, 10, 1740, 900])
+            screen = get(0, 'ScreenSize');
+            figure('position', [70, 10, min(1740, screen(3)-180), min(900, screen(4)-180)])
             tl = tiledlayout(length(params), length(params));
             title(tl, 'Random effects marginal distributions')
             

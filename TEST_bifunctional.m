@@ -3,10 +3,10 @@
 clearvars
 close all
 
-% model =  'model_bifunctional.txt';
-% system = ODEIQM(model , 'FixedParameters', ["k1" "k2" "k4" "k6"]);
-% 
-% save('system_bifunctional_measurable.mat', 'system')
+model =  'model_bifunctional.txt';
+system = System(model, 'FixedParameters', ["k1" "k2" "k4" "k6"]);
+
+save('system_bifunctional_measurable.mat', 'system')
 
 load('system_bifunctional_measurable.mat')
 

@@ -4,22 +4,22 @@ clearvars
 
 % name = 'generalizedLV';
 % model =  'model_generalizedLV1.txt';
-% system = ODEIQM(name, model, 'FixedParameters', strcat('r', string(1:16)));
+% system = System(name, model, 'FixedParameters', strcat('r', string(1:16)));
 % save('system_generalizedLV1.mat', 'system')
 % 
 % name = 'generalizedLV';
 % model =  'model_generalizedLV2.txt';
-% system = ODEIQM(name, model, 'FixedParameters', strcat('r', string(1:16)));
+% system = System(name, model, 'FixedParameters', strcat('r', string(1:16)));
 % save('system_generalizedLV2.mat', 'system')
 % 
 % name = 'generalizedLV';
 % model =  'model_generalizedLV4.txt';
-% system = ODEIQM(name, model, 'FixedParameters', strcat('r', string(1:16)));
+% system = System(name, model, 'FixedParameters', strcat('r', string(1:16)));
 % save('system_generalizedLV4.mat', 'system')
 % 
 % name = 'generalizedLV';
 % model =  'model_generalizedLV8.txt';
-% system = ODEIQM(name, model, 'FixedParameters', strcat('r', string(1:16)));
+% system = System(name, model, 'FixedParameters', strcat('r', string(1:16)));
 % save('system_generalizedLV8.mat', 'system')
 
 % load('system_generalizedLV1.mat')

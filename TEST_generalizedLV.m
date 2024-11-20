@@ -7,7 +7,7 @@ P = 8;
 name = sprintf('model_generalizedLV%d', P);
 
 % model = [name '.txt'];
-% system = ODEIQM(model, 'FixedParameters', strcat('r', string(1:16)));
+% system = System(model, 'FixedParameters', strcat('r', string(1:16)));
 % save([name '.mat'], 'system')
 
 load([name '.mat'])

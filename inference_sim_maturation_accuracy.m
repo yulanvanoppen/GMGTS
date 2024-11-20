@@ -5,7 +5,7 @@ close all
 
 name = 'maturation_fluorescence'; 
 model =  'model_maturation_onestep.txt';
-system = ODEIQM(name, model, 'FixedParameters', ["kr" "kdr" "kdil" "d"]);
+system = System(name, model, 'FixedParameters', ["kr" "kdr" "kdil" "d"]);
 
 % save('system_maturation_delay.mat', 'system')
 
