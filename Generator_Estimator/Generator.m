@@ -11,7 +11,7 @@ classdef Generator < handle
             default_N = 20;                                                 % number of cells
             default_t = [0 5 10 20:10:200];                                 % time grid
             default_error_std = .05;                                        % std of lognormal multiplicative errors
-            default_init = system.x0' + 1e-4;                               % boundary conditions
+            default_init = system.x0' + 1e-8;                               % boundary conditions
             default_b = system.k0';                                         % initial estimate
             default_LogNormal = false;
 

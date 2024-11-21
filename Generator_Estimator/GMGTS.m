@@ -24,17 +24,20 @@ function [out, estimator] = GMGTS(model_file, data, varargin)
 % 
 %   out = GMGTS(model_file, data, t, ...) assumes which the
 %   measurements were taken at time points t. If data is a struct, t is
-%   ignored and assumed to be a field of data.
+%   ignored and assumed to be a field of data. If omitted, the default
+%   t = 0:size(data, 1)-1 is used.
 % 
 %   out = GMGTS(model_file, data, t, observed, ...) specifies the
 %   indices of the observables with respect to the system determined by
 %   model_file through observed. If data is a struct, observed is ignored
-%   and assumed to be a field of data.
+%   and assumed to be a field of data. If omitted, it is assumed that
+%   observed = 1:size(data, 2).
 % 
 %   out = GMGTS(model_file, data, t, observed, init, ...) integrates
 %   the ODE system from the initial values given in init to make state
 %   predictions. If data is a struct, init is ignored and assumed to be a
-%   field of data.
+%   field of data. If omitted, the initial values are all assumed to equal
+%   1e-8.
 %
 %   out = GMGTS(model_file, data, t, observed, init, Plot=false, ...)
 %   disables plots with parameter estimates, the inferred random effects 

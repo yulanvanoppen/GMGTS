@@ -47,7 +47,7 @@ classdef Estimator < handle
             
             default_t = 0:size(data, 1)-1;
             default_observed = 1:size(data, 2);
-            default_init = 1e-4 * ones(1, system.K);
+            default_init = 1e-8 * ones(1, system.K);
             
             default_Stages = 2;
             default_Methods = "GMGTS";

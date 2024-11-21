@@ -191,13 +191,14 @@ properties (Access = private)
         
         
         function process(obj, model_file)                               % Process model file
+            model_file = char(model_file);
             contents = fileread(model_file);                                % regex to extract system name
             token = regexp(contents, '\* MODEL NAME\s*([^\n]+)\s*\*', 'tokens');
             obj.name = strtrim(token{1}{1});
             
             installIQMtools;
-            obj.model = IQMmodel(char(model_file));                         % read model file
-            obj.MEX = ['MEX' model_file(6:end-4)];
+            obj.model = IQMmodel(model_file);                               % read model file
+            obj.MEX = ['MEX' replace(model_file, {'model_', '.txt'}, {'_', ''})];
             IQMmakeMEXmodel(obj.model, obj.MEX);                            % convert to MEXmodel
             obj.MEXf = str2func(obj.MEX);
             
