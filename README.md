@@ -18,7 +18,9 @@ The `Estimator` class infers underlying ODE parameter (random effect) distributi
 
 &nbsp;
 
+
 ## Usage
+### `GMGTS()` utility function
 `GMGTS` attempts to recover the distribution parameters `b` and `D` of a mixed-effects model
 ```
     dx_i(t)/dt = g(t, x_i(t)) beta_i + h(t, x_i(t))
@@ -26,22 +28,48 @@ The `Estimator` class infers underlying ODE parameter (random effect) distributi
 ```
 from measurements `(t_j, y_ij)`, where `y_ij` are vectors of observed components of `x_i(t_j)` perturbed by measurement noise.
 
-`GMGTS` builds on the GTS framework, using gradient matching to obtain cell-specific estimates after smoothing the measurements. &nbsp;
+`GMGTS` builds on the GTS framework, using gradient matching to obtain cell-specific estimates after smoothing the measurements.
+ 
+`out = GMGTS(model_file, data, ...)` infers random effect distributions of the system specified in the IQM `model_file` (instructions for setting up the model file are given below) from measurements given in `data`. Here `data` is either a `TxLxN`-dimensional array with measurements at `T` time points for `L` observables and `N` cells (individuals), or a `1x1 struct` with its measurements stored in a field named `y` or `traces`. The `estimates` are returned as a struct containing the inferred random effect mean `b` and covariance matrix `D`, individual estimates `beta`, and predicted states. Additional arguments are passed to the System and Estimator constructors, see the details below.
 
-### Syntax
-`out = GMGTS(model_file, data, ...)` infers random effect distributions of the system specified in the IQM `model_file` (instructions for setting up the model file are given below) from measurements given in `data`. Here `data` is either a `TxLxN`-dimensional array with measurements at `T` time points for `L` observables and `N` cells (individuals), or a `1x1 struct` with its measurements stored in a field named `y` or `traces`. The `estimates` are returned as a struct containing the inferred random effect mean `b` and covariance matrix `D`, individual estimates `beta`, and predicted states. Additional arguments are passed to the System and Estimator constructors, see the details below. &nbsp;
+`out = GMGTS(model_file, data, t, ...)` assumes which the measurements were taken at time points `t`. If `data` is a struct, `t` is ignored and assumed to be a field of `data`.
 
-`out = GMGTS(model_file, data, t, ...)` assumes which the measurements were taken at time points `t`. If `data` is a struct, `t` is ignored and assumed to be a field of `data`. &nbsp;
+`out = GMGTS(model_file, data, t, observed, ...)` specifies the indices of the observables with respect to the system determined by `model_file` through `observed`. If `data` is a struct, `observed` is ignored and assumed to be a field of `data`.
 
-`out = GMGTS(model_file, data, t, observed, ...)` specifies the indices of the observables with respect to the system determined by `model_file` through `observed`. If `data` is a struct, `observed` is ignored and assumed to be a field of `data`. &nbsp;
+`out = GMGTS(model_file, data, t, observed, init, ...)` integrates the ODE system from the initial values given in `init` to make state predictions. If `data` is a struct, `init` is ignored and assumed to be a field of `data`.
 
-`out = GMGTS(model_file, data, t, observed, init, ...)` integrates the ODE system from the initial values given in `init` to make state predictions. If `data` is a struct, `init` is ignored and assumed to be a field of `data`. &nbsp;
+`out = GMGTS(_, 'Plot', false, ...)` disables plots with parameter estimates, the inferred random effects distribution, model predictions, and any smoothed measurements (enabled by default).
 
-`out = GMGTS(model_file, data, t, observed, init, 'Plot', false, ...)` disables plots with parameter estimates, the inferred random effects distribution, model predictions, and any smoothed measurements (enabled by default). &nbsp;
+`[out, estimator] = GMGTS(model_file, data, ...)` also returns the instantiated `Estimator` object.
 
-`[out, estimator] = GMGTS(model_file, data, ...)` also returns the instantiated `Estimator` object. &nbsp;
+See `System` and `Estimator` for a description of additional input arguments.
 
-### Input arguments
+&nbsp;
+
+
+### `System` class ODE functions and simulations
+The `System` class handles ODE integration, evaluation of (functions derived from) the system's right-hand side, and corresponding partial derivatives as part of the Estimator and Generator classes.
+
+`system = System(model_file)` instantiates a `System` object by processing an IQM tools `model_file`. The specified ODE system should be linear in parameters, otherwise, unexpected results will follow. The model file should contain the model name, the differential equations and initial conditions for each state, and nominal values for the parameters (model reactions and functions are not yet supported). The `model_file` argument should be the path to a `txt` file. Its contents should be structured as follows:
+```
+********** MODEL NAME
+Simple model
+********** MODEL STATES
+d/dt(A) = k1 - k2*A
+d/dt(B) = k2*A
+A(0) = 1
+B(0) = 0
+********** MODEL PARAMETERS
+k1 = 0.1
+k2 = 0.5
+```
+
+`system = System(model_file, 'FixedParameters', names)` treats the parameters specified in `names` as constant, fixing them at their corresponding nominal values prescribed in `model_file`.
+
+`system = System(model_file, 'FixedParameters', names, 'FixedValues', values)` alternatively fixes the parameters in `names` at the given `values`. The arguments `names` and `values` should have equal numbers of elements.
+
+&nbsp;
+
 
 ### Output
 
