@@ -1,5 +1,40 @@
 classdef System < handle
-    properties (Access = private)
+%SYSTEM handles ODE integration, evaluation of (functions derived from) the
+%system's right-hand side, and corresponding partial derivatives as part of
+%the Estimator and Generator classes.
+%   
+%   system = SYSTEM(model_file) instantiates a System object by processing
+%   an IQM tools model_file. The specified ODE system should be linear in
+%   parameters, otherwise, unexpected results will follow. The model file
+%   should contain the model name, the differential equations and initial
+%   conditions for each state, and nominal values for the parameters (model
+%   reactions and functions are not yet supported). The model_file argument
+%   should be the path to a txt file. Its contents should be structured as
+%   follows:
+%   
+%       ********** MODEL NAME
+%       Example model
+%       ********** MODEL STATES
+%       d/dt(A) = k1 - k2*A
+%       d/dt(B) = k2*A
+%       A(0) = 1
+%       B(0) = 0
+%       ********** MODEL PARAMETERS
+%       k1 = 0.1
+%       k2 = 0.5
+%   
+%   system = SYSTEM(model_file, 'FixedParameters', names) treats the
+%   parameters specified in names as constant, fixing them at their
+%   corresponding nominal values prescribed in model_file.
+%   
+%   system = SYSTEM(model_file, 'FixedParameters', names, 'FixedValues',
+%   values) alternatively fixes the parameters in names at the given
+%   values. The arguments names and values should have equal numbers of
+%   elements.
+%
+%   See also ESTIMATOR, GENERATOR.
+
+properties (Access = private)
         df_cell                                                             % raw jacobian handle
         g_cell                                                              % RHS: f(x; p) = g(x)⋅k + h(x)
         dg_cell                                                             % d/dx of RHS
@@ -9,6 +44,8 @@ classdef System < handle
         model                                                               % IQMtools model
         MEX                                                                 % MEX model name
         MEXf                                                                % MEX function
+        fixed_indices                                                       % fixed parameter indices
+        variable_indices                                                    % variable parameter indices
     end
     
     properties (SetAccess = private)
@@ -18,8 +55,6 @@ classdef System < handle
         states                                                              % state names
         parameters                                                          % parameters
         parameters_variable                                                 % parameters excluding fixed
-        fixed_indices                                                       % fixed parameter indices
-        variable_indices
         x0                                                                  % model initial conditions
         k0                                                                  % model initial parameters
     end
