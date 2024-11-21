@@ -1,7 +1,7 @@
 function [out, estimator] = GMGTS(model_file, data, varargin)
-%GMGTS is an algorithm to infer random effects distributions.
+%GMGTS infers random effects distributions of ODE-based ME models.
 %   GMGTS attempts to recover the distribution parameters b,D of a
-%   mixed-effects model
+%   (linear in parameters) ODE-based mixed-effects model
 %       dx_i(t)/dt = g(t, x_i(t)) beta_i + h(t, x_i(t))
 %       beta_i ~ (log)Normal(b, D)                          (i = 1, ..., N)
 %   from measurements (t_j, y_ij), where y_ij are vectors of observed
