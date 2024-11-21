@@ -18,7 +18,7 @@ classdef Generator < handle
             parser = inputParser();
             
             overlaps = @(x, S) ~isempty(intersect(x, S));
-            addRequired(parser, 'system', @(x) isa(x, 'ODEIQM'));
+            addRequired(parser, 'system', @(x) isa(x, 'System') || isstring(string(x)) && numel(string(x)) == 1);
             addParameter(parser, 'N', default_N, @(x) isnumeric(x) && x >= 2);
             addParameter(parser, 't', default_t, @isnumeric);
             addParameter(parser, 'error_std', default_error_std, @(x) x > 0);
@@ -47,6 +47,10 @@ classdef Generator < handle
             end
             
             obj.system = system;                                            % ODE system handle
+            if ~isa(system, 'System')                                       % process model file if provided
+                system = ODEIQM(string(system), varargin{:});
+            end
+            obj.system = system;
             obj.add_system_defaults();                                      % complete with defaults
         end
         
@@ -146,7 +150,8 @@ classdef Generator < handle
             set(groot, 'defaultLegendInterpreter','latex');
             set(groot,'defaultTextInterpreter','latex');
             
-            figure('position', [10, 70, 1740, 900])
+            screen = get(0, 'ScreenSize');
+            figure('position', [10, 70, min(1740, screen(3)-180), min(900, screen(4)-180)])
             tl = tiledlayout(ceil(obj.system.K / 5), min(obj.system.K, 5));
             n_cells = min(obj.data.N, 20);
             title(tl, sprintf('Generated data (%d/%d shown)', n_cells, obj.data.N))

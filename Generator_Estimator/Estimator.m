@@ -77,7 +77,7 @@ classdef Estimator < handle
             
             parser = inputParser;
             parser.KeepUnmatched = true;
-            addRequired(parser, 'system', @(x) isa(x, 'ODEIQM') || isstring(string(x)) && numel(string(x)) == 1);
+            addRequired(parser, 'system', @(x) isa(x, 'System') || isstring(string(x)) && numel(string(x)) == 1);
             addRequired(parser, 'data', @(x) isstruct(x) || isnumeric(x) && ndims(x) == 3 && size(x, 1) > 1);
             addOptional(parser, 't', default_t, @(x) isnumeric(x) && numel(unique(x)) == data.T);
             addOptional(parser, 'observed', default_observed, @(x) isnumeric(x) && numel(unique(x)) == data.L);
@@ -127,7 +127,12 @@ classdef Estimator < handle
 
                                                                         % Basic parsing to allow conditional input validations
         function [system, data] = parse_initial(~, system, data, varargin)  
-            if ~isa(system, 'ODEIQM'), system = ODEIQM(string(system)); end % process model file if provided
+            if ~isa(system, 'System')                                       % process model file if provided
+                namevalue = arrayfun(@(idx) iscellstr(varargin(idx)) || isstring(varargin{idx}), 1:length(varargin));
+                first_namevalue = find(namevalue, 1);
+                if isempty(first_namevalue), first_namevalue = length(varargin)+1; end
+                system = System(string(system), varargin{first_namevalue:end});
+            end
             if isstruct(data)                                               % default any missing fields
                 if ~isfield(data, 'traces') && isfield(data, 'y'), data.traces = data.y; end
                 if ~isfield(data, 't'), data.t = 0:size(data.traces, 1)-1; end
@@ -135,11 +140,11 @@ classdef Estimator < handle
                 if ~isfield(data, 'init'), data.init = system.x0' + 1e-4; end
             else                                                            % components provided separately
                 traces = data;                                              % array with measurements instead of struct
-                if ~iscellstr(varargin(1)) %#ok<ISCLSTR>                    % recursively check if optional or Name/Value
+                if ~iscellstr(varargin(1)) && ~isstring(varargin{1})        % recursively check if optional or Name/Value
                     t = sort(unique(reshape(varargin{1}, 1, [])));
-                    if ~iscellstr(varargin(2)) %#ok<ISCLSTR>
+                    if ~iscellstr(varargin(2)) && ~isstring(varargin{2})
                         observed = sort(unique(reshape(varargin{2}, 1, [])));
-                        if ~iscellstr(varargin(3)) %#ok<ISCLSTR>
+                        if ~iscellstr(varargin(3)) && ~isstring(varargin{3})
                             init = reshape(varargin{3}, 1, []);
                         else                                                % substitute defaults instead
                             init = 1e-4 * ones(1, system.K);
@@ -397,6 +402,7 @@ classdef Estimator < handle
             set(groot,'defaultTextInterpreter', 'latex');
             
             parser = inputParser;
+            parser.KeepUnmatched = true;
             default_States = 1:obj.system.K;
             default_Parameters = 1:obj.system.P;
             default_MaxCells = 5;

@@ -23,12 +23,12 @@ classdef System < handle
 %       k1 = 0.1
 %       k2 = 0.5
 %   
-%   system = SYSTEM(model_file, 'FixedParameters', names) treats the
+%   system = SYSTEM(model_file, FixedParameters=names) treats the
 %   parameters specified in names as constant, fixing them at their
 %   corresponding nominal values prescribed in model_file.
 %   
-%   system = SYSTEM(model_file, 'FixedParameters', names, 'FixedValues',
-%   values) alternatively fixes the parameters in names at the given
+%   system = SYSTEM(model_file, FixedParameters=names, FixedValues=values) 
+%   alternatively fixes the parameters in names at the given
 %   values. The arguments names and values should have equal numbers of
 %   elements.
 %
@@ -196,7 +196,7 @@ properties (Access = private)
             obj.name = strtrim(token{1}{1});
             
             installIQMtools;
-            obj.model = IQMmodel(model_file);                               % read model file
+            obj.model = IQMmodel(char(model_file));                         % read model file
             obj.MEX = ['MEX' model_file(6:end-4)];
             IQMmakeMEXmodel(obj.model, obj.MEX);                            % convert to MEXmodel
             obj.MEXf = str2func(obj.MEX);

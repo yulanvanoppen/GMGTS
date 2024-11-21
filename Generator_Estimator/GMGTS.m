@@ -19,7 +19,8 @@ function [out, estimator] = GMGTS(model_file, data, varargin)
 %   named y or traces. The estimates are returned as a struct containing
 %   the inferred random effect mean b and covariance matrix D, individual
 %   estimates beta, and predicted states. Additional arguments are passed
-%   to the System and Estimator constructors, see the details below.
+%   to the System and Estimator constructors, as well as Estimator.plot() 
+%   method, see the details below.
 % 
 %   out = GMGTS(model_file, data, t, ...) assumes which the
 %   measurements were taken at time points t. If data is a struct, t is
@@ -35,7 +36,7 @@ function [out, estimator] = GMGTS(model_file, data, varargin)
 %   predictions. If data is a struct, init is ignored and assumed to be a
 %   field of data.
 %
-%   out = GMGTS(model_file, data, t, observed, init, 'Plot', false, ...)
+%   out = GMGTS(model_file, data, t, observed, init, Plot=false, ...)
 %   disables plots with parameter estimates, the inferred random effects 
 %   distribution, model predictions, and any smoothed measurements (enabled
 %   by default).
@@ -63,6 +64,6 @@ function [out, estimator] = GMGTS(model_file, data, varargin)
         out = [outputs{1} outputs{2}];
     end
     
-    if parser.Results.Plot, plot(estimator), end                            % plot if required
+    if parser.Results.Plot, plot(estimator, varargin{:}), end               % plot if required
 end
 
