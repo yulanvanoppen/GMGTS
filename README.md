@@ -12,7 +12,9 @@ Run the `inference_*.m` files to reproduce the results in [1].
 
 The folder `FP_data/` contains the FP maturation microscopy data used for inference.
 
-All subclasses and auxiliary files related to the Generator and Estimator classes are contained in `Generator_Estimator/`.
+All subclasses and auxiliary files related to the System, Generator, and Estimator classes are contained in `Components/`.
+
+The `System` class produces functions and integrations from an IQM Tools model file.
 
 The `Generator` class generates heterogeneous single-cell time series data from a specified NLME model.
 
@@ -112,15 +114,15 @@ underlying gradients for each state.
 
 `init` - Initial conditions  
 `numeric vector`  
-(uses the initial conditions specified by system by default)
+(uses the initial conditions specified by `system` by default)
 
 `b` - Random effects mean vector  
 `numeric vector`  
-(uses the nominal parameter vectors of system by default)
+(uses the nominal parameter vectors of `system` by default)
 
 `D_mult` - Random effects (common) coefficient of variation  
 `.1 (default) | positive scalar`  
-(ignored when D is specified, see below)
+(ignored when `D` is specified, see below)
 
 `D` - Random effects covariance matrix  
 `positive semidefinite matrix`
@@ -130,7 +132,7 @@ underlying gradients for each state.
 
 `lognormal` - Use log-normal random effects distribution  
 `false (default) | true`  
-(if true, the log-mean Lb and log-covariance matrix LD are approximated
+(if true, the log-mean `Lb` and log-covariance matrix `LD` are approximated
 by moment matching: `LD==log(1+D./(b'*b))` and `Lb==log(b)-diag(LD)/2`)
 
 &nbsp;
