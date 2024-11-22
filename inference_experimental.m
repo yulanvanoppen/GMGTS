@@ -110,18 +110,11 @@ for idx = size(DATA, 2)
     if idx < 7, model = 'model_maturation_twostep.txt'; else, model = 'model_maturation_onestep.txt'; end
     disp(data(idx).name);
     
-    system = System(model, 'FixedParameters', ["kr" "kdr" "kdil" "d"]);
+    system = System(model, FixedParameters=["kr" "kdr" "kdil" "d"]);
     system.fixed.values(3) = data(idx).kdil;
-    data(idx).init = system.x0' + 1e-6;
+    data(idx).init = system.x0' + 1e-8;
     data(idx).observed = system.K;
-    estimator = Estimator(system, data(idx) ...                             % estimator setup
-                          , 'Stages', 2 ...                                 % 0: smoothing only, 1: first stage only
-                          , 'Methods', methods ...                          % GMGT, GTS, or both
-                          , 'Knots', knots ...
-                          , 'LB', [.001 .001] ...
-                          , 'UB', [20 1] ...
-                          , 'LogNormal', true ...
-                         );
+    estimator = Estimator(system, data(idx), Knots=knots, LB=[.001 .001], UB=[20 1], LogNormal=true);
     estimator.estimate();
 %     data(idx).logL_variable_GMGTS = estimator.loglik(5);
 %     data(idx).logL_variable = estimator.loglik(5, "GTS");

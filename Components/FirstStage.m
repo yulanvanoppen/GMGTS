@@ -198,7 +198,7 @@ classdef FirstStage < handle
                 
                                                                             % unbiased log
 %                 diag_i = diag(log(.5 + sqrt(.25 + diag(diag(varbeta_i)./beta_i.^2))));
-%                 full_i = log(varbeta_i ./ (beta_i * beta_i') .* exp(-.5 * (diag_i * diag_i')) + 1);
+%                 full_i = log(1 + varbeta_i ./ (beta_i * beta_i') .* exp(-.5 * (diag_i * diag_i')));
 %                 obj.data.varbeta_lnorm(:, :, i) = full_i - diag(diag_i - diag(full_i));
 %                 obj.data.beta_lnorm(i, :) = log(beta_i');
             end
