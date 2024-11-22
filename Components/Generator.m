@@ -1,4 +1,66 @@
 classdef Generator < handle
+%GENERATOR handles data generation from ODE-based mixed-effect models
+%
+%   generator = GENERATOR(system, ...) instantiates a GENERATOR object to
+%   draw parameters from a specified random effects distribution, integrate
+%   ODE systems to obtain cell trajectories, and produce measurements by
+%   perturbing the trajectories with measurement noise.
+%
+%   measurements = generator.generate() generates a struct containing
+%   fields 'traces' (perturbed trajectories), 't' (measurement time points), 'observed' (observed state indices),
+%   'init' (assumed initial conditions), 'T' (number of time points), 'L'
+%   (number of observables), and 'N' (number of cells).
+%
+%   measurements = generator.generate(beta) uses the cell-specific 
+%   (P-dimensional) parameter vectors in beta (NxP-dimensional) instead of
+%   randomly drawn random effects (useful for boostrapping tests).
+%
+%   [measurements, ground_truth] = generator.generate(...) additionally
+%   returns the complete ground_truth struct, which also contains the 
+%   population parameters, the cell-specific parameters, and the unperturbed
+%   cell trajectories.
+%
+%   plot(generator) plots generated trajectories and corresponding 
+%   underlying gradients for each state.
+%
+%   CONSTRUCTOR NAME-VALUE ARGUMENTS
+%     N - Number of cells to generate
+%       20 (default) | positive integer
+%
+%     t - Measurement times
+%       0:20:200 (default) | numeric vector
+%
+%     error_const - Additive noise standard deviation
+%       0 (default) | positive scalar
+%
+%     error_std - Multiplicative noise standard deviation
+%       .05 (default) | positive scalar
+%
+%     init - Initial conditions
+%       numeric vector
+%       (uses the initial conditions specified by system by default)
+%
+%     b - Random effects mean vector
+%       numeric vector
+%       (uses the nominal parameter vectors of system by default)
+%
+%     D_mult - Random effects (common) coefficient of variation
+%       .1 (default) | positive scalar
+%       (ignored when D is specified, see below)
+%
+%     D - Random effects covariance matrix
+%       positive semidefinite matrix
+%
+%     observed - Observed state indices
+%       1:system.K (default) | positive integer vector
+%
+%     lognormal - Use log-normal random effects distribution
+%       false (default) | true
+%       (if true, the log-mean Lb and log-covariance matrix LD are approximated
+%       by moment matching: LD==log(1+D./(b'*b)) and Lb==log(b)-diag(LD)/2)
+% 
+%   See also GMGTS, SYSTEM, ESTIMATOR
+
     properties (SetAccess = private)
         system                                                              % nested object controlling ODE system
         settings = struct();                                                % data generation settings
@@ -9,8 +71,9 @@ classdef Generator < handle
     methods
         function obj = Generator(system, varargin)                      % Constructor
             default_N = 20;                                                 % number of cells
-            default_t = [0 5 10 20:10:200];                                 % time grid
-            default_error_std = .05;                                        % std of lognormal multiplicative errors
+            default_t = 0:20:200;                                           % time grid
+            default_error_const = 0;                                        % additive error standard deviation
+            default_error_std = .05;                                        % std of 'multiplicative' errors
             default_init = system.x0' + 1e-8;                               % boundary conditions
             default_b = system.k0';                                         % initial estimate
             default_LogNormal = false;
@@ -21,6 +84,7 @@ classdef Generator < handle
             addRequired(parser, 'system', @(x) isa(x, 'System') || isstring(string(x)) && numel(string(x)) == 1);
             addParameter(parser, 'N', default_N, @(x) isnumeric(x) && x >= 2);
             addParameter(parser, 't', default_t, @isnumeric);
+            addParameter(parser, 'error_const', default_error_const, @(x) x > 0);
             addParameter(parser, 'error_std', default_error_std, @(x) x > 0);
             addParameter(parser, 'init', default_init, ...
                          @(x) isnumeric(x) && numel(x) == system.K);
@@ -69,7 +133,7 @@ classdef Generator < handle
                     default_D_mult = .25;
                     
                 case 'repressilator'
-                    default_D_mult = .01;
+                    default_D_mult = .1;
                     
                 case 'generalizedLV'
                     default_D_mult = .25;
@@ -125,8 +189,9 @@ classdef Generator < handle
             obj.data.original = obj.system.integrate(obj.data.beta, obj.settings);
             obj.data.doriginal = obj.system.rhs(obj.data.original, obj.data.t, obj.data.beta);
             
-            errors = normrnd(0, obj.settings.error_std, size(obj.data.original));
-            obj.data.traces = obj.data.original .* (1 + errors);            % multiplicative measurement noise
+            add = normrnd(0, obj.settings.error_const, size(obj.data.original));
+            mul = normrnd(0, obj.settings.error_std, size(obj.data.original));
+            obj.data.traces = add + obj.data.original .* (1+mul);           % additive/multiplicative measurement noise
 
             [measurements, ground_truth] = obj.separate();
         end

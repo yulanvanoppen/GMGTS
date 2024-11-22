@@ -34,8 +34,9 @@ classdef Estimator < handle
 %       plot(estimator, ...) produces relevant plots for the executed stages
 %       and methods.
 %
-%       plot(estimator, True=ground_truth, ...) additionally plots the 
-%       data-generating parameters and trajectories for reference.
+%       plot(estimator, True=ground_truth, ...) additionally plots the
+%       data-generating parameters and trajectories contained in the
+%       ground_truth struct for reference; see the Generator class.
 %
 %       plot(estimator, States=states, ...) restricts the plots to the
 %       specified states, which may consist of indices or state labels.
@@ -116,7 +117,7 @@ classdef Estimator < handle
 %       variation are included, only one is considered with precedence 'cv',
 %       'sd', 'prec' from high to low)
 %
-%   See also GMGTS, SYSTEM
+%   See also GMGTS, SYSTEM, GENERATOR
     
     properties (SetAccess = private)
         data                                                                % measurements struct
