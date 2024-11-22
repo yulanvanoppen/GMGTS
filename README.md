@@ -49,7 +49,7 @@ See `System` and `Estimator` for a description of additional input arguments.
 &nbsp;
 
 
-### `System` class ODE functions and simulations
+### `System` class for ODE functions and simulations
 The `System` class handles ODE integration, evaluation of (functions derived from) the system's right-hand side, and corresponding partial derivatives as part of the Estimator and Generator classes.
 
 `system = System(model_file)` instantiates a `System` object by processing an IQM tools `model_file`. The specified ODE system should be linear in parameters, otherwise, unexpected results will follow. The model file should contain the model name, the differential equations and initial conditions for each state, and nominal values for the parameters (model reactions and functions are not yet supported). The `model_file` argument should be the path to a `txt` file. Its contents should be structured as follows:
@@ -73,9 +73,123 @@ k2 = 0.5
 &nbsp;
 
 
-### Output
+### `Generator` class to generate data from ODE-based ME models
 
-### Examples
+&nbsp;
+
+### `Estimator` class to manage the stages of the GTS and GMGTS methods
+#### Constructor
+`estimator = Estimator(system, data, ...)` instantiates an `Estimator`
+object to infer random effect distributions of the specified
+`K`-dimensional (ODE) system (see the `System` class) from measurements
+given in data. Here data is either a `TxLxN`-dimensional array with
+measurements at `T` time points for `L` observables and `N` cells
+(individuals), or a `1x1 struct` with its measurements stored in a field
+named `'y'` or `'traces'` . This struct may additionally contain fields
+`'t'`, a (`T`-dimensional) array of measurement time points, `'observed'`, an
+(`L`-dimensional) vector of indices of observed states (with respect to
+the specified system), and `'init'`, a (`K`-dimensional) vector of initial
+conditions. Default values are imputed for any omitted additional
+fields.
+
+`estimator = ESTIMATOR(system, traces, t, observed, init, ...)` provides
+an alternative constructor with (optional) positional arguments.
+Omitting `t`, `observed`, or `init` causes default values to be used for the
+omitted and all subsequent arguments. The defaults are:
+`t = 0:size(data, 1)-1`, `observed = 1:size(data, 2)`, and `init = 1e-8*ones(1, system.K)`
+
+#### Methods
+`varargout = estimator.estimate()` carries out estimation for the
+specified stages and method(s), returning two arguments when both
+both methods are used.
+
+`varargout = estimator.estimate(silent)` suppresses console prompts 
+during estimation if `silent==true`.
+
+`plot(estimator, ...)` produces relevant plots for the executed stages
+and methods.
+
+`plot(estimator, True=ground_truth, ...)` additionally plots the 
+data-generating parameters and trajectories contained in the `ground_truth` struct for reference; see the `Generator` class.
+
+`plot(estimator, States=states, ...)` restricts the plots to the
+specified `states`, which may consist of indices or state labels.
+
+`plot(estimator, Parameters=parameters, ...)` restricts the plots to
+the specified `parameters`, which may consist of indices or labels.
+
+`plot(estimator, MaxCells=N, ...)` only plots data and predictions for
+the first `N` cells.
+
+#### Constructor Name-Value arguments
+`Stages` - GMGTS and GTS stages to execute  
+`2 (default) | 0 | 1`  
+(GMGTS either executes smoothing only (`0`), smoothing
+and first-stage estimates (`1`), or everything including the
+second-stage estimates (`2`); GTS executes the first-stage only (`0`, `1`) or everything (`2`))
+
+`Methods` - Frameworks to use  
+`"GMGTS" (default) | ["GMGTS" "GTS"] | "GTS"`
+
+`AutoKnots` - Use automatic B-spline knot placement heuristic  
+`true (default) | false`
+
+`Knots` - Knot locations used for B-spline smoothing  
+`numeric vector | cell array`  
+(either a single numeric vector of knot locations for all observed
+states, or a cell array of state-specific knot location vectors)
+
+`InteractiveSmoothing` - Use the interactive app to smooth measurements  
+`true (default) | false`
+
+`LB` - Parameter space lower bounds  
+`numeric vector`  
+(.25 times the nominal parameter values specified by `system` by default)
+
+`UB` - Parameter space upper bounds  
+`numeric vector`  
+(4 times the nominal parameter value specified by `system` by default)
+
+`PositiveState` - Force smoothed/predicted state positivity  
+`true (default) | false` 
+
+`TimePoints` - Time point grid for first-stage optimization  
+`numeric vector`  
+(10 equidistant intervals in the measurement interval by default)
+
+`MaxIterationsSM` - Maximum number of smoothing iterations  
+`20 (default) | positive integer`
+
+`ConvergenceTolSM` - Convergence step tolerance for smoothing iterations  
+`1e-3 (default) | positive scalar`
+
+`NMultiStartFS` - Number of multistarts for first-stage initialization  
+`10 (default) | positive integer`
+
+`MaxIterationsFS` - Maximum number of first-stage iterations  
+`5 (default) | positive integer`
+
+`ConvergenceTolFS` - Convergence step tolerance for first-stage iterations  
+`2e-3 (default) | positive scalar`
+
+`MaxIterationsSS` - Maximum number of second-stage iterations  
+`10 (default) | positive integer`
+
+`ConvergenceTolSS` - Convergence step tolerance for second-stage iterations  
+`1e-3 (default) | positive scalar`
+
+`LogNormal` - Infer log-normal random effect distribution  
+`false (default) | true`
+
+`Prior` - Include parameter prior (same for each cell)  
+`struct('mean', 0, 'prec', 0) (default) | struct`  
+(the struct should have fields 'mean' specifying the prior mean,
+and either `'prec'`, the prior precision matrix, `'sd'`, the prior
+component-wise standard deviations, or `'cv'`, the prior component-
+wise coefficients of variation; if multiple fields indicating
+variation are included, only one is considered with precedence `'cv'`,
+`'sd'`, `'prec'` from high to low)
+
 
 &nbsp;
 
