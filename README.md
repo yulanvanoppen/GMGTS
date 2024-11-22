@@ -74,6 +74,64 @@ k2 = 0.5
 
 
 ### `Generator` class to generate data from ODE-based ME models
+#### Constructor and methods syntax
+`generator = Generator(system, ...)` instantiates a `Generator` object to
+draw parameters from a specified random effects distribution, integrate
+ODE systems to obtain cell trajectories, and produce measurements by
+perturbing the trajectories with measurement noise.
+
+`measurements = generator.generate()` generates a struct containing
+fields 'traces' (perturbed trajectories), 't' (measurement time points), 'observed' (observed state indices),
+'init' (assumed initial conditions), 'T' (number of time points), 'L'
+(number of observables), and 'N' (number of cells).
+
+`measurements = generator.generate(beta`) uses the cell-specific 
+(P-dimensional) parameter vectors in beta (NxP-dimensional) instead of
+randomly drawn random effects (useful for boostrapping tests).
+
+`[measurements, ground_truth] = generator.generate(...)` additionally
+returns the complete `ground_truth` struct, which also contains the 
+population parameters, the cell-specific parameters, and the unperturbed
+cell trajectories.
+
+`plot(generator)` plots generated trajectories and corresponding 
+underlying gradients for each state.
+
+#### Constructor Name-Value arguments
+`N` - Number of cells to generate  
+`20 (default) | positive integer`
+
+`t` - Measurement times  
+`0:20:200 (default) | numeric vector`
+
+`error_const` - Additive noise standard deviation  
+`0 (default) | positive scalar`
+
+`error_std` - Multiplicative noise standard deviation  
+.05 (default) | positive scalar
+
+`init` - Initial conditions  
+`numeric vector`  
+(uses the initial conditions specified by system by default)
+
+`b` - Random effects mean vector  
+`numeric vector`  
+(uses the nominal parameter vectors of system by default)
+
+`D_mult` - Random effects (common) coefficient of variation  
+`.1 (default) | positive scalar`  
+(ignored when D is specified, see below)
+
+`D` - Random effects covariance matrix  
+`positive semidefinite matrix`
+
+`observed` - Observed state indices  
+`1:system.K (default) | positive integer vector`
+
+`lognormal` - Use log-normal random effects distribution  
+`false (default) | true`  
+(if true, the log-mean Lb and log-covariance matrix LD are approximated
+by moment matching: `LD==log(1+D./(b'*b))` and `Lb==log(b)-diag(LD)/2`)
 
 &nbsp;
 
