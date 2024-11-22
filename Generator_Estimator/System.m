@@ -3,7 +3,7 @@ classdef System < handle
 %system's right-hand side, and corresponding partial derivatives as part of
 %the Estimator and Generator classes.
 %   
-%   system = SYSTEM(model_file) instantiates a System object by processing
+%   system = SYSTEM(model_file) instantiates a SYSTEM object by processing
 %   an IQM tools model_file. The specified ODE system should be linear in
 %   parameters, otherwise, unexpected results will follow. The model file
 %   should contain the model name, the differential equations and initial
