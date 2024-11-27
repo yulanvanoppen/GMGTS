@@ -3,4 +3,7 @@
 *.mat
 *.fig
 *.png
+PLOT_*.m
 simulation/
+experimental/
+figures/

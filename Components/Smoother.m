@@ -179,7 +179,7 @@ classdef Smoother < handle
             base = false(obj.T-2, obj.L);                                   % start with three equidistant interior knots
             [~, base_ind] = min(abs(t - linspace(t(1), t(end), 5)));        % choose closest data time points
             base_ind = unique(base_ind);                                    % remove any duplicates
-            base(base_ind(2:end-1), :) = true;                              % disregard interval ends
+            base(base_ind(2:end-1)-1, :) = true;                            % disregard interval ends
 
             d21 = t(2:end-1) - t(1:end-2);                                  % finite difference derivative approximations
             d31 = t(3:end) - t(1:end-2);                                    % with unequal time step

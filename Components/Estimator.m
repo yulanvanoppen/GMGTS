@@ -970,8 +970,8 @@ classdef Estimator < handle
             manual = true;
             if ~isnumeric(levels)
                 varargin = [{levels} varargin];
-%                 levels = [.68 .95];
-                levels = (normcdf(.25:.25:2)-.5)*2;
+                levels = [.68 .95];
+%                 levels = (normcdf(.25:.25:2)-.5)*2;
                 manual = false;
             end
             
@@ -995,7 +995,7 @@ classdef Estimator < handle
             quantiles = sqrt(chi2inv(levels, 2) / S_inv(1, 1));
             levels_transf = Estimator.mvlnpdf(exp(m+[quantiles' zeros(length(levels), 1)]), m, S);
 %             if max(levels) > 1e8, levels = min(levels, 1e16) / max(levels) * 1e8; end
-            if any(~isfinite(levels_transf))
+            if any(~isreal(p), 'all')
                 disp(1)
             end
             if manual

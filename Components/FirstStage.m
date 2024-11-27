@@ -193,14 +193,17 @@ classdef FirstStage < handle
                 beta_i = obj.beta_fs(i, :)';
                 varbeta_i = obj.varbeta(:, :, i);
                                                                             % moment matching
-                obj.data.varbeta_lnorm(:, :, i) = log(1 + varbeta_i ./ (beta_i*beta_i'));
-                obj.data.beta_lnorm(i, :) = log(beta_i') - .5 * diag(obj.data.varbeta_lnorm(:, :, i))';
+%                 obj.data.varbeta_lnorm(:, :, i) = log(1 + varbeta_i ./ (beta_i*beta_i'));
+%                 obj.data.beta_lnorm(i, :) = log(beta_i') - .5 * diag(obj.data.varbeta_lnorm(:, :, i))';
                 
-                                                                            % unbiased log
-%                 diag_i = diag(log(.5 + sqrt(.25 + diag(diag(varbeta_i)./beta_i.^2))));
-%                 full_i = log(1 + varbeta_i ./ (beta_i * beta_i') .* exp(-.5 * (diag_i * diag_i')));
-%                 obj.data.varbeta_lnorm(:, :, i) = full_i - diag(diag_i - diag(full_i));
-%                 obj.data.beta_lnorm(i, :) = log(beta_i');
+                                                                            % unbiased log-normal approximation
+                diag_i = diag(log(.5 + sqrt(.25 + diag(diag(varbeta_i)./beta_i.^2))));
+                full_i = log(1 + varbeta_i ./ (beta_i * beta_i') .* exp(-.5 * (diag_i + diag_i')));
+                obj.data.varbeta_lnorm(:, :, i) = full_i;
+                obj.data.beta_lnorm(i, :) = log(beta_i');
+                if ~isreal(obj.data.beta_lnorm(i, :)) || ~isreal(obj.data.varbeta_lnorm(:, :, i))
+                    obj.data.convergence_steps(i) = 1;
+                end
             end
         end
         
@@ -338,7 +341,7 @@ classdef FirstStage < handle
                     var_delta = tryinv(Z' * (S \ Z));
                     var_XOdXO = [Z_fs; dZ_fs] * var_delta * [Z_fs; dZ_fs]';
 
-                    obj.varbeta(:, :, i) = diag(obj.beta_fs(i, :).^2);      % initial (large) parameter uncertainty
+                    obj.varbeta(:, :, i) = .25*diag(obj.beta_fs(i, :).^2);% initial (large) parameter uncertainty
                     var_XdXint = [dF_dbeta; df_dbeta] * obj.varbeta(:, :, i) * [dF_dbeta; df_dbeta]';
 
                     var_XdX = zeros(2 * obj.system.K * obj.T);              % full state/gradient covariance

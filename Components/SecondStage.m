@@ -18,15 +18,15 @@ classdef SecondStage < handle
             obj.system = system;
             obj.settings = settings;
                                                                             % select 90% closest to convergence
-            obj.cells = find(obj.data.convergence_steps < quantile(obj.data.convergence_steps, .9));
-            obj.cells = 1:obj.data.N;
+            obj.cells = find(obj.data.convergence_steps < .1);
+%             obj.cells = 1:obj.data.N;
             obj.beta = data.beta_fs;                                        % initial estimates from first stage results
             if settings.lognormal
                 obj.beta = data.beta_lnorm;
             end                           
 %             obj.beta = data.beta_fs(obj.data.converged, :);
-            obj.b = mean(obj.beta);                                         % sample mean and covariance
-            obj.D = cov(obj.beta);
+            obj.b = mean(obj.beta(obj.cells, :));                           % sample mean and covariance
+            obj.D = cov(obj.beta(obj.cells, :));
         end
         
                                                                         % Main optimization function
@@ -72,7 +72,7 @@ classdef SecondStage < handle
         function M_step(obj, iter, Dinv_iter)                           % Maximization step of EM algorithm
             warning('off','MATLAB:singularMatrix')
             
-            obj.b(iter+1, :) = mean(obj.beta(:, :, iter+1));                % update parameter mean
+            obj.b(iter+1, :) = mean(obj.beta(obj.cells, :, iter+1));        % update parameter mean
             b_iter = obj.b(iter+1, :)';
 
             summands = zeros(obj.system.P, obj.system.P, obj.data.N);       % collect terms of D
@@ -115,7 +115,7 @@ classdef SecondStage < handle
         
         
         function estimate_precisions(obj)                               % Inverse covariance matrix estimates
-            for i = 1:obj.data.N
+            for i = obj.cells
                 covariance = obj.data.varbeta(:, :, i);
                 if obj.settings.lognormal
                     covariance = obj.data.varbeta_lnorm(:, :, i);

@@ -6,9 +6,9 @@ close all
 P = 8;
 name = sprintf('model_generalizedLV%d', P);
 
-% model = [name '.txt'];
-% system = System(model, 'FixedParameters', strcat('r', string(1:16)));
-% save([name '.mat'], 'system')
+model = [name '.txt'];
+system = System(model, FixedParameters=strcat('r', string(1:16)));
+save([name '.mat'], 'system')
 
 load([name '.mat'])
 
@@ -33,8 +33,8 @@ plot(generator)
 %% Estimate ----------------------------------------------------------------
 
 methods = [];
-methods = [methods "GMGTS"];
-% methods = [methods "GTS"];
+% methods = [methods "GMGTS"];
+methods = [methods "GTS"];
 
 estimator = Estimator(system, data ...                                      % estimator setup
                       , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only

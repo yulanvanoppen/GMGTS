@@ -3,16 +3,13 @@
 clearvars
 close all
 
-model =  'model_maturation_onestep.txt';
-system = System(model, 'FixedParameters', ["kr" "kdr" "kdil" "d"]);
-
-save('system_maturation_delay.mat', 'system')
-
+% system = System('model_maturation_onestep.txt', 'FixedParameters', ["kr" "kdr" "kdil" "d"]);
+% save('system_maturation_delay.mat', 'system')
 load('system_maturation_delay.mat')
 
 first_obs = 2;
-dt = 20;
-noise_level = .1;
+dt = 10;
+noise_level = .03;
 seed = 1;
 
 generator = Generator(system, N=100, t=unique([0 5 10 20 dt:dt:200]), error_std=noise_level, ...
@@ -26,9 +23,11 @@ rng(seed);
 
 methods = [];
 methods = [methods "GMGTS"];
-methods = [methods "GTS"];
+% methods = [methods "GTS"];
 
-estimator = Estimator(system, data, Stages=2, Methods=methods, Knots=[5 10 20 60 120 180]);
+% estimator = Estimator(system, data, Stages=2, Methods=methods, Knots=[10 20 60 120 180]);
+estimator = Estimator(system, data, Stages=2, Methods=methods, Knots=[10 20 60 120]);
+% estimator = Estimator(system, data, Stages=2, Methods=methods);
 
 rng(seed);
 estimator.estimate();
@@ -46,6 +45,6 @@ GMGTS_wasserstein = wsdist(GMGTS_est.b_est, GMGTS_est.D_est, ground_truth.b, gro
 hellinger_GMGTS_GTS = [GMGTS_hellinger GTS_hellinger]
 wasserstein_GMGTS_GTS = [GMGTS_wasserstein GTS_wasserstein]
 
-close all
-plot(estimator, True=ground_truth, States=1:6, MaxCells=7)
+% close all
+% plot(estimator, True=ground_truth, States=1:6, MaxCells=7)
 

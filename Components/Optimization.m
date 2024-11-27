@@ -3,8 +3,8 @@ classdef Optimization < handle
     properties (Constant)
         options_mpcActiveSet = struct('DataType', 'double', 'MaxIterations', 200, 'ConstraintTolerance', 1e-6, ...
                                       'UseHessianAsInput', true, 'IntegrityChecks', false);
-        options_interiorpoint = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-7);
-        options_initialization = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-2);
+        options_interiorpoint = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-8);
+        options_initialization = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-4);
     end
     
 
@@ -48,6 +48,7 @@ classdef Optimization < handle
 
 
         function beta = least_squares(SS, lb, ub, nstart, init)         % (Multistarted) numerical least squares
+            ws = warning('off', 'MATLAB:nearlySingularMatrix');
             if nargin == 5, nstart = 1; end
             value = Inf;
             for start = 1:nstart
@@ -63,6 +64,7 @@ classdef Optimization < handle
                 if value_new < value, value = value_new; opt = opt_new; end
             end
             beta = exp(opt);                                                % transform back to normal scale
+            warning(ws)
         end
     end
 end
