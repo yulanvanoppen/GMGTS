@@ -10,8 +10,8 @@ close all
 
 load('system_bifunctional_measurable.mat')
 
-first_obs = 5;
-dt = 5;
+first_obs = 1;
+dt = 2.5;
 noise_level = .01;
 seed = 2;
 

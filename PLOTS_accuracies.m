@@ -139,7 +139,7 @@ set(groot,'defaultAxesTickLabelInterpreter','latex');
 set(groot,'defaulttextinterpreter','latex');
 set(groot,'defaultLegendInterpreter','latex');
 
-load('simulation/maturation_accuracy.mat');
+load('simulation/maturation_accuracy2.mat');
 % load('simulation/bifunctional_measurable.mat');
 
 close all
@@ -148,16 +148,16 @@ first_obs = 2;
 
 figure('Position', [100, 100, 350, 250])
 xgroupdata = repmat(repmat(1:6, 10, 1), 6, 1);
-ydata = -2*ones([size(wasserstein_GMGTS(:, :, :, first_obs), [1 2]) 6]);
-ydata(:, :, 2:end-1) = -wasserstein_GMGTS(:, :, :, first_obs);
+ydata = -2*ones([size(ws_GMGTS(:, :, :, first_obs), [1 2]) 6]);
+ydata(:, :, 2:end-1) = -ws_GMGTS(:, :, :, first_obs);
 ydata = reshape(permute(ydata, [1 3 2]), [], 6);
 cdata = kron((0:5)', ones(10, 6));
 
 b1 = boxchart(xgroupdata(:), ydata(:), 'GroupByColor', cdata(:), 'Orientation', 'horizontal', 'MarkerStyle', '.');
 hold on
 
-ydata = 2*ones([size(wasserstein_GTS(:, :, :, first_obs), [1 2]) 6]);
-ydata(:, :, 2:end-1) = wasserstein_GTS(:, :, :, first_obs);
+ydata = 2*ones([size(ws_GTS(:, :, :, first_obs), [1 2]) 6]);
+ydata(:, :, 2:end-1) = ws_GTS(:, :, :, first_obs);
 ydata = reshape(permute(ydata, [1 3 2]), [], 6);
 cdata = kron((1:6)', ones(10, 6));
 
@@ -178,12 +178,12 @@ ylim([.5 6.5])
 % text(-.25, .85, "\textbf{GMGTS}", 'FontSize', 12, 'FontWeight', 'bold', 'HorizontalAlignment', 'center')
 % text(.25, .85, "\textbf{GTS}", 'FontSize', 12, 'FontWeight', 'bold', 'HorizontalAlignment', 'center')
 
-xlim([-.015 .01])
-xticks(-.012:.004:.01)
-xticklabels(["0.0012" "0.008" "0.004" "0" fliplr(["0.008" "0.004"])])
-xline([-.004 .004], 'k--')
-text(-.009, .85, "\textbf{GMGTS}", 'FontSize', 12, 'FontWeight', 'bold', 'HorizontalAlignment', 'center')
-text(.008, .85, "\textbf{GTS}", 'FontSize', 12, 'FontWeight', 'bold', 'HorizontalAlignment', 'center')
+xlim([-.6 .4])
+% xticks(-.012:.004:.01)
+% xticklabels(["0.0012" "0.008" "0.004" "0" fliplr(["0.008" "0.004"])])
+xline([-.1 .1], 'k--')
+text(-.3, .85, "\textbf{GMGTS}", 'FontSize', 12, 'FontWeight', 'bold', 'HorizontalAlignment', 'center')
+text(.3, .85, "\textbf{GTS}", 'FontSize', 12, 'FontWeight', 'bold', 'HorizontalAlignment', 'center')
 
 
 yticklabels(["0.1\%", "0.5\%", "1\%", "2\%", "5\%", "10\%"])
