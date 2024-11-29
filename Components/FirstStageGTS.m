@@ -1,3 +1,8 @@
+% START FROM TRUE CELL PARAMETERS
+% LOG-LIKELIHOOD VALUES
+%
+
+
 classdef FirstStageGTS < handle
     properties (SetAccess = private)
         data                                                                % data aggregate struct
