@@ -139,8 +139,10 @@ set(groot,'defaultAxesTickLabelInterpreter','latex');
 set(groot,'defaulttextinterpreter','latex');
 set(groot,'defaultLegendInterpreter','latex');
 
-load('simulation/maturation_accuracy2.mat');
-% load('simulation/bifunctional_measurable.mat');
+% load('simulation/maturation_accuracy2.mat');
+load('simulation/bifunctional_accuracy.mat');
+ws_GMGTS = ws_GMGTS(:, :, :, [1 3]);
+ws_GTS = ws_GTS(:, :, :, [1 3]);
 
 close all
 
@@ -178,12 +180,12 @@ ylim([.5 6.5])
 % text(-.25, .85, "\textbf{GMGTS}", 'FontSize', 12, 'FontWeight', 'bold', 'HorizontalAlignment', 'center')
 % text(.25, .85, "\textbf{GTS}", 'FontSize', 12, 'FontWeight', 'bold', 'HorizontalAlignment', 'center')
 
-xlim([-.6 .4])
+xlim([-.6 .6])
 % xticks(-.012:.004:.01)
 % xticklabels(["0.0012" "0.008" "0.004" "0" fliplr(["0.008" "0.004"])])
 xline([-.1 .1], 'k--')
 text(-.3, .85, "\textbf{GMGTS}", 'FontSize', 12, 'FontWeight', 'bold', 'HorizontalAlignment', 'center')
-text(.3, .85, "\textbf{GTS}", 'FontSize', 12, 'FontWeight', 'bold', 'HorizontalAlignment', 'center')
+text(.4, .85, "\textbf{GTS}", 'FontSize', 12, 'FontWeight', 'bold', 'HorizontalAlignment', 'center')
 
 
 yticklabels(["0.1\%", "0.5\%", "1\%", "2\%", "5\%", "10\%"])

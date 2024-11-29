@@ -10,8 +10,8 @@ classdef FirstStageGTS < handle
         
         beta_fs                                                             % cell-specific parameter estimates 
         varbeta                                                             % uncertainty estimates of beta
-        sigma                                                               % additive measurement error variance 
-        tau                                                                 % multiplicative measurement error variance 
+        sigma2                                                              % additive measurement error variance 
+        tau2                                                                % multiplicative measurement error variance 
         variances_fs                                                        % measurement error variances along time grid
         
         convergence_steps                                                   % relative iteration steps
@@ -31,8 +31,8 @@ classdef FirstStageGTS < handle
             [obj.T, obj.L, obj.N] = size(obj.data.traces);                  % extract from trajectory dimensions
             
             obj.varbeta = repmat(eye(system.P), 1, 1, obj.N);
-            obj.sigma = zeros(1, obj.L);
-            obj.tau = zeros(1, obj.L);
+            obj.sigma2 = zeros(1, obj.L);
+            obj.tau2 = zeros(1, obj.L);
             obj.variances_fs = ones(obj.T, obj.L, obj.N);
             
             obj.convergence_steps = ones(1, obj.N);                         % ensure no cells are considered converged
@@ -67,13 +67,13 @@ classdef FirstStageGTS < handle
             obj.uncertainties_beta();                                       % compute estimate uncertainties
             
             obj.save_estimates();                                           % save estimates and fitted trajectories
-            output = obj.data;                                              % return data appended with FS results                                        % return expanded data container
+            output = obj.data;                                              % return data appended with FS results
         end
         
         
-        function initialize(obj)
+        function initialize(obj)                                        % Initial numerical optimization on population average
             beta_init = Optimization.least_squares(@obj.squares_sum, obj.settings.lb, obj.settings.ub, obj.settings.nstart);
-            obj.beta_fs = repmat(beta_init, obj.N, 1);                       % copy to each cell
+            obj.beta_fs = repmat(beta_init, obj.N, 1);                      % copy to each cell
         end
         
         
@@ -126,8 +126,8 @@ classdef FirstStageGTS < handle
                 coefficients = Optimization.noise_parameters(coefficients, predicted, obj.data.traces(:, k, :));
                 if sum(coefficients) == 0, coefficients(1) = mean(response); end
                 
-                obj.sigma(k) = coefficients(1);                             % store optimum and compute variances
-                obj.tau(k) = coefficients(2);
+                obj.sigma2(k) = coefficients(1);                            % store optimum and compute variances
+                obj.tau2(k) = coefficients(2);
                 obj.variances_fs(:, k, :) = reshape(design * coefficients', obj.T, 1, obj.N);
             end
         end
@@ -156,14 +156,17 @@ classdef FirstStageGTS < handle
                 beta_i = obj.beta_fs(i, :)';
                 varbeta_i = obj.varbeta(:, :, i);
                                                                             % moment matching
-                obj.data.varbeta_lnorm(:, :, i) = log(1 + varbeta_i ./ (beta_i*beta_i'));
-                obj.data.beta_lnorm(i, :) = log(beta_i') - .5 * diag(obj.data.varbeta_lnorm(:, :, i))';
+%                 obj.data.varbeta_lnorm(:, :, i) = log(1 + varbeta_i ./ (beta_i*beta_i'));
+%                 obj.data.beta_lnorm(i, :) = log(beta_i') - .5 * diag(obj.data.varbeta_lnorm(:, :, i))';
                 
                                                                             % unbiased log
-%                 diag_i = diag(log(.5 + sqrt(.25 + diag(diag(varbeta_i)./beta_i.^2))));
-%                 full_i = log(varbeta_i ./ (beta_i * beta_i') .* exp(-.5 * (diag_i * diag_i')) + 1);
-%                 obj.data.varbeta_lnorm(:, :, i) = full_i - diag(diag_i - diag(full_i));
-%                 obj.data.beta_lnorm(i, :) = log(beta_i');
+                diag_i = diag(log(.5 + sqrt(.25 + diag(diag(varbeta_i)./beta_i.^2))));
+                full_i = log(varbeta_i ./ (beta_i * beta_i') .* exp(-.5 * (diag_i + diag_i')) + 1);
+                obj.data.varbeta_lnorm(:, :, i) = full_i - diag(diag_i - diag(full_i));
+                obj.data.beta_lnorm(i, :) = log(beta_i');
+                if ~isreal(obj.data.beta_lnorm(i, :)) || ~isreal(obj.data.varbeta_lnorm(:, :, i))
+                    obj.data.convergence_steps(i) = 1;
+                end
             end
         end
         

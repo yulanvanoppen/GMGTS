@@ -3,19 +3,19 @@
 clearvars
 close all
 
-% model =  'model_bifunctional.txt';
-% system = System(model, 'FixedParameters', ["k1" "k2" "k4" "k6"]);
-% 
-% save('system_bifunctional_measurable.mat', 'system')
+system = System('model_bifunctional.txt', FixedParameters=["k1" "k2" "k4" "k6"]);
+% system = System('model_bifunctional.txt', FixedParameters=["k1" "k2" "k7"]);
+
+save('system_bifunctional_measurable.mat', 'system')
 
 load('system_bifunctional_measurable.mat')
 
-first_obs = 1;
-dt = 2.5;
+first_obs = 3;
+dt = 10;
 noise_level = .01;
 seed = 2;
 
-generator = Generator(system, N=100, t=unique([0 2.5 5 dt:dt:100]), error_std=noise_level, ...
+generator = Generator(system, N=200, t=unique([0 2.5 5 dt:dt:100]), error_std=noise_level, ...
                       D_mult=.25, observed=first_obs:system.K);
 rng(seed);
 [data, ground_truth] = generator.generate();
@@ -28,7 +28,7 @@ methods = [];
 methods = [methods "GMGTS"];
 methods = [methods "GTS"];
 
-estimator = Estimator(system, data, Stages=2, Methods=methods,...
+estimator = Estimator(system, data, Stages=2, Methods=methods, NMultiStartFS=10, ...
                       Knots=[0 2.5 40]);
 rng(seed);
 estimator.estimate();

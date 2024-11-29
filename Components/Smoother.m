@@ -22,8 +22,8 @@ classdef Smoother < handle
 
         delta                                                               % B-spline coefficients
 
-        sigma                                                               % additive measurement error variance 
-        tau                                                                 % multiplicative measurement error variance 
+        sigma2                                                              % additive measurement error variance 
+        tau2                                                                % multiplicative measurement error variance 
 
         variances_sm                                                        % measurement error variances at data time grid
         variances_fs                                                        % and first stage time grid
@@ -48,8 +48,8 @@ classdef Smoother < handle
             obj.delta = cell(1, obj.L);
             obj.update_knots(obj.settings.knots);
             
-            obj.sigma = zeros(1, obj.L);                                    % initialize measurement error variances
-            obj.tau = zeros(1, obj.L);
+            obj.sigma2 = zeros(1, obj.L);                                   % initialize measurement error variances
+            obj.tau2 = zeros(1, obj.L);
             obj.variances_sm = zeros(obj.T, obj.L, obj.N);
             obj.variances_fs = zeros(length(settings.t_fs), obj.L, obj.N);
         end
@@ -141,8 +141,8 @@ classdef Smoother < handle
                 coefficients = Optimization.noise_parameters(coefficients, predicted, obj.data.traces(:, k, :));
                 if sum(coefficients) == 0, coefficients(1) = mean(response); end
                 
-                obj.sigma(k) = coefficients(1);                             % store optimum and compute variances
-                obj.tau(k) = coefficients(2);
+                obj.sigma2(k) = coefficients(1);                            % store optimum and compute variances
+                obj.tau2(k) = coefficients(2);
                 obj.variances_sm(:, k, :) = reshape(design * coefficients', obj.T, 1, obj.N);
                 
                                                                             % equivalent for first stage time grid
