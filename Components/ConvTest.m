@@ -177,7 +177,7 @@ classdef ConvTest < handle
             proposal_sigma = sqrt(diag(proposal_Sigma))';
             ranges = [proposal_mu - 2*proposal_sigma; proposal_mu + 2*proposal_sigma];
             
-            n_points = 11;
+            n_points = 21;
             sample_size = n_points^obj.system.P
             n_iter = 100;
             conv_thresh = .05;
@@ -214,7 +214,7 @@ classdef ConvTest < handle
                 for iter = 1:n_iter
                     if obj.L < obj.system.K, obj.integrate; end             % ODE integration
                     obj.estimate_covariances(iter);                         % residual covariance estimation
-                    obj.update_parameters(iter);                            % gradient matching
+                    obj.update_parameters();                                % gradient matching
                     
                     if obj.system.P > 1                                     % compute relative iteration steps
                         obj.convergence_steps = vecnorm((obj.data.beta_fs - obj.beta_fs)') ./ vecnorm(obj.data.beta_fs');
@@ -257,33 +257,33 @@ classdef ConvTest < handle
                 legend('convergence', 'divergence', 'population', 'cell')
             end
             
-            colors = .5 * ones(sample_size, 3, obj.N);
-            for i = 1:obj.N
-                colors(converged_sample(:, i), :, i) = repmat([0 0.4470 0.7410], sum(converged_sample(:, i)), 1);
-                colors(diverged_sample(:, i) & ~converged_sample(:, i), :, i) = ...
-                    repmat([0.6350 0.0780 0.1840], sum(diverged_sample(:, i) & ~converged_sample(:, i)), 1);
-            end
-            colors(:, 4, :) = .5;
+%             colors = .5 * ones(sample_size, 3, obj.N);
+%             for i = 1:obj.N
+%                 colors(converged_sample(:, i), :, i) = repmat([0 0.4470 0.7410], sum(converged_sample(:, i)), 1);
+%                 colors(diverged_sample(:, i) & ~converged_sample(:, i), :, i) = ...
+%                     repmat([0.6350 0.0780 0.1840], sum(diverged_sample(:, i) & ~converged_sample(:, i)), 1);
+%             end
+%             colors(:, 4, :) = .5;
             
-            close all
-            figure
-            tiledlayout(2, 5)
-            for i = 1:10
-                nexttile(i)
-                h1 = plot([sample(:, 1)'; reshape(beta_sample(:, 1, :, i), sample_size, n_iter)'], ...
-                         [sample(:, 2)'; reshape(beta_sample(:, 2, :, i), sample_size, n_iter)']);
-                set(h1, {'color'}, num2cell(colors(:, :, i), 2));
-                hold on
-                h = plot(repmat(beta_sample(:, 1, end, i)', 2, 1), repmat(beta_sample(:, 2, end, i)', 2, 1), 'o');
-                set(h, {'color'}, num2cell(colors(:, :, i), 2));
-                h2 = scatter(obj.data.beta_fs(:, 1), obj.data.beta_fs(:, 2), 300, '.', MarkerEdgeColor="#D95319");
-                h3 = plot(obj.data.beta_fs(i, 1), obj.data.beta_fs(i, 2), '.', MarkerSize=30, Color="#7E2F8E");
-                title(sprintf('Cell %d', i))
-                xlabel('kp')
-                ylabel('km')
-                
-                legend([h1(1) h2 h3], 'paths', 'population', 'cell')
-            end
+%             close all
+%             figure
+%             tiledlayout(2, 5)
+%             for i = 1:10
+%                 nexttile(i)
+%                 h1 = plot([sample(:, 1)'; reshape(beta_sample(:, 1, :, i), sample_size, n_iter)'], ...
+%                          [sample(:, 2)'; reshape(beta_sample(:, 2, :, i), sample_size, n_iter)']);
+%                 set(h1, {'color'}, num2cell(colors(:, :, i), 2));
+%                 hold on
+%                 h = plot(repmat(beta_sample(:, 1, end, i)', 2, 1), repmat(beta_sample(:, 2, end, i)', 2, 1), 'o');
+%                 set(h, {'color'}, num2cell(colors(:, :, i), 2));
+%                 h2 = scatter(obj.data.beta_fs(:, 1), obj.data.beta_fs(:, 2), 300, '.', MarkerEdgeColor="#D95319");
+%                 h3 = plot(obj.data.beta_fs(i, 1), obj.data.beta_fs(i, 2), '.', MarkerSize=30, Color="#7E2F8E");
+%                 title(sprintf('Cell %d', i))
+%                 xlabel('kp')
+%                 ylabel('km')
+%                 
+%                 legend([h1(1) h2 h3], 'paths', 'population', 'cell')
+%             end
             
 %             close all
 %             figure
@@ -478,7 +478,7 @@ classdef ConvTest < handle
                     var_delta = tryinv(Z' * (S \ Z));
                     var_XOdXO = [Z_fs; dZ_fs] * var_delta * [Z_fs; dZ_fs]';
 
-                    obj.varbeta(:, :, i) = diag(obj.beta_fs(i, :).^2);      % initial (large) parameter uncertainty
+                    obj.varbeta(:, :, i) = .25^2*diag(obj.beta_fs(i, :).^2);% initial (large) parameter uncertainty
                     var_XdXint = [dF_dbeta; df_dbeta] * obj.varbeta(:, :, i) * [dF_dbeta; df_dbeta]';
 
                     var_XdX = zeros(2 * obj.system.K * obj.T);              % full state/gradient covariance

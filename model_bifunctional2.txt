@@ -13,8 +13,8 @@ d/dt(RF)  = (k6+k7)*RpH - k5*(HF+HpR-HpT)*(RpT-RpH) - k2*(HpT-HpR)*(RF+RpH-RpT) 
 d/dt(HpT) = k1*(HF+HpR-HpT) - k8*(HpT-HpR) - k4*HpR
 d/dt(RpT) = k4*HpR - k7*RpH
                                             
-HF(0)   = .17
-RF(0)   = 6
+HF(0)  = .17
+RF(0)  = 6
 HpR(0) = 0
 RpH(0) = 0
 HpT(0) = 0

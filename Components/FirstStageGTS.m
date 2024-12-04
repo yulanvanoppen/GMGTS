@@ -133,6 +133,7 @@ classdef FirstStageGTS < handle
                 
                 obj.sigma2(k) = coefficients(1);                            % store optimum and compute variances
                 obj.tau2(k) = coefficients(2);
+                
                 obj.variances_fs(:, k, :) = reshape(design * coefficients', obj.T, 1, obj.N);
             end
         end

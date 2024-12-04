@@ -7,7 +7,7 @@
 clearvars
 close all
 
-system = System('model_bifunctional.txt', FixedParameters=["k1" "k2" "k4" "k6"]);
+system = System('model_bifunctional2.txt', FixedParameters=["k1" "k2" "k4" "k6"]);
 save('system_bifunctional_measurable.mat', 'system')
 load('system_bifunctional_measurable.mat')
 
@@ -84,7 +84,7 @@ end
 
 
 mkdir('simulation')
-wsfile = 'simulation/bifunctional_accuracy.mat';
+wsfile = 'simulation/bifunctional_accuracy2.mat';
 save(wsfile);
 
 
