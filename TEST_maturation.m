@@ -27,7 +27,7 @@ methods = [methods "GMGTS"];
 
 % estimator = Estimator(system, data, Stages=2, Methods=methods, Knots=[10 20 60 120 180]);
 estimator = Estimator(system, data, Stages=2, Methods=methods, Knots=[10 20 60 120], ...
-                      TestConvergence=true, ConvergenceTolFs=1e-5, MaxIterationsFS=100);
+                      TestConvergence=true, ConvergenceTolFs=1e-5, MaxIterationsFS=10);
 % estimator = Estimator(system, data, Stages=2, Methods=methods);
 
 rng(seed);

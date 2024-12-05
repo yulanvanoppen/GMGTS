@@ -173,16 +173,14 @@ classdef ConvTest < handle
         
         function attraction(obj)
             proposal_mu = obj.data.b_est;
-            proposal_Sigma = obj.data.D_est*4;
+            proposal_Sigma = obj.data.D_est*2;
             proposal_sigma = sqrt(diag(proposal_Sigma))';
             ranges = [proposal_mu - 2*proposal_sigma; proposal_mu + 2*proposal_sigma];
             
             n_points = 21;
-            sample_size = n_points^obj.system.P
-            n_iter = 100;
+            sample_size = n_points^obj.system.P;
+            n_iter = 50;
             conv_thresh = .05;
-            n_iter = 20;
-            conv_thresh = .1;
             
 %             sample = max(1e-8, mvnrnd(proposal_mu, proposal_Sigma, sample_size));
             sample = [kron(linspace(ranges(1, 1), ranges(2, 1), n_points)', ones(n_points, 1)), ...
@@ -224,8 +222,9 @@ classdef ConvTest < handle
                     
                     beta_sample(idx, :, iter, :) = reshape(obj.beta_fs', 1, obj.system.P, obj.N);
                    
-                    if max(obj.convergence_steps) < conv_thresh || iter > 5 && all(obj.convergence_steps > .75*init_sample(idx, :))
+                    if max(obj.convergence_steps) < conv_thresh
                         beta_sample(idx, :, iter+1:end, :) = repmat(beta_sample(idx, :, iter, :), 1, 1, n_iter-iter);
+                        disp('break')
                         break
                     end
                 end
@@ -234,11 +233,12 @@ classdef ConvTest < handle
             end
             
             converged_sample = steps_sample < conv_thresh;
-            diverged_sample = steps_sample > .75*init_sample; 
+            diverged_sample = steps_sample > init_sample; 
 
             for i = 1:obj.N, attraction_basins{i} = sample(converged_sample(:, i), :); end
             for i = 1:obj.N, divergence{i} = sample(diverged_sample(:, i) & ~converged_sample(:, i), :); end
             
+            close all
             figure
             tiledlayout(2, 5)
             for i = 1:10
@@ -257,40 +257,38 @@ classdef ConvTest < handle
                 legend('convergence', 'divergence', 'population', 'cell')
             end
             
-%             colors = .5 * ones(sample_size, 3, obj.N);
-%             for i = 1:obj.N
-%                 colors(converged_sample(:, i), :, i) = repmat([0 0.4470 0.7410], sum(converged_sample(:, i)), 1);
-%                 colors(diverged_sample(:, i) & ~converged_sample(:, i), :, i) = ...
-%                     repmat([0.6350 0.0780 0.1840], sum(diverged_sample(:, i) & ~converged_sample(:, i)), 1);
-%             end
-%             colors(:, 4, :) = .5;
+            colors = .5 * ones(sample_size, 3, obj.N);
+            for i = 1:obj.N
+                colors(converged_sample(:, i), :, i) = repmat([0 0.4470 0.7410], sum(converged_sample(:, i)), 1);
+                colors(diverged_sample(:, i) & ~converged_sample(:, i), :, i) = ...
+                    repmat([0.6350 0.0780 0.1840], sum(diverged_sample(:, i) & ~converged_sample(:, i)), 1);
+            end
+            colors(:, 4, :) = .5;
             
-%             close all
-%             figure
-%             tiledlayout(2, 5)
-%             for i = 1:10
-%                 nexttile(i)
-%                 h1 = plot([sample(:, 1)'; reshape(beta_sample(:, 1, :, i), sample_size, n_iter)'], ...
-%                          [sample(:, 2)'; reshape(beta_sample(:, 2, :, i), sample_size, n_iter)']);
-%                 set(h1, {'color'}, num2cell(colors(:, :, i), 2));
-%                 hold on
-%                 h = plot(repmat(beta_sample(:, 1, end, i)', 2, 1), repmat(beta_sample(:, 2, end, i)', 2, 1), 'o');
-%                 set(h, {'color'}, num2cell(colors(:, :, i), 2));
-%                 h2 = scatter(obj.data.beta_fs(:, 1), obj.data.beta_fs(:, 2), 300, '.', MarkerEdgeColor="#D95319");
-%                 h3 = plot(obj.data.beta_fs(i, 1), obj.data.beta_fs(i, 2), '.', MarkerSize=30, Color="#7E2F8E");
-%                 title(sprintf('Cell %d', i))
-%                 xlabel('kp')
-%                 ylabel('km')
-%                 
-%                 legend([h1(1) h2 h3], 'paths', 'population', 'cell')
-%             end
+            figure
+            tiledlayout(2, 5)
+            for i = 1:10
+                nexttile(i)
+                h1 = plot([sample(:, 1)'; reshape(beta_sample(:, 1, :, i), sample_size, n_iter)'], ...
+                         [sample(:, 2)'; reshape(beta_sample(:, 2, :, i), sample_size, n_iter)']);
+                set(h1, {'color'}, num2cell(colors(:, :, i), 2));
+                hold on
+                h = plot(repmat(beta_sample(:, 1, end, i)', 2, 1), repmat(beta_sample(:, 2, end, i)', 2, 1), 'o');
+                set(h, {'color'}, num2cell(colors(:, :, i), 2));
+                h2 = scatter(obj.data.beta_fs(:, 1), obj.data.beta_fs(:, 2), 300, '.', MarkerEdgeColor="#D95319");
+                h3 = plot(obj.data.beta_fs(i, 1), obj.data.beta_fs(i, 2), '.', MarkerSize=30, Color="#7E2F8E");
+                title(sprintf('Cell %d', i))
+                xlabel('kp')
+                ylabel('km')
+                
+                legend([h1(1) h2 h3], 'paths', 'population', 'cell')
+            end
             
-%             close all
-%             figure
-%             h = plot(repmat(beta_sample(:, 1, end, 1), 1, 2)', repmat(beta_sample(:, 2, end, 1), 1, 2)', 'o');
-%             set(h, {'color'}, num2cell(colors(:, :, 1), 2));
-%             hold on
-%             plot(obj.data.beta_fs(1, 1), obj.data.beta_fs(1, 2), '.', MarkerSize=30, Color="#7E2F8E")
+            figure
+            h = plot(repmat(beta_sample(:, 1, end, 1), 1, 2)', repmat(beta_sample(:, 2, end, 1), 1, 2)', 'o');
+            set(h, {'color'}, num2cell(colors(:, :, 1), 2));
+            hold on
+            plot(obj.data.beta_fs(1, 1), obj.data.beta_fs(1, 2), '.', MarkerSize=30, Color="#7E2F8E")
             
 
             disp(1)
@@ -298,7 +296,7 @@ classdef ConvTest < handle
         
         
         function update_parameters(obj)                                 % Update (cell-specific) parameter estimates
-            for i = obj.not_converged                                       % model slopes from splines and integrations
+            for i = 1:obj.N                                                 % model slopes from splines and integrations
                 design = obj.system.g(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
                 const = obj.system.h(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
                 response = obj.dsmoothed_fitted(2:end-1, :, i) - const;     % spline and integration slopes

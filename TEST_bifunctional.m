@@ -4,13 +4,10 @@ clearvars
 close all
 
 % system = System('model_bifunctional2.txt', FixedParameters=["k1" "k2" "k4" "k6"]);
-% % system = System('model_bifunctional.txt', FixedParameters=["k1" "k2" "k7"]);
-% 
 % save('system_bifunctional_measurable.mat', 'system')
-
 load('system_bifunctional_measurable.mat')
 
-first_obs = 3;
+first_obs = 1;
 dt = 10;
 noise_level = .05;
 seed = 2;
@@ -30,7 +27,7 @@ methods = [methods "GMGTS"];
 % methods = [methods "GTS"];
 
 estimator = Estimator(system, data, Stages=2, Methods=methods, NMultiStartFS=10, ...
-                      Knots=[0 2.5 40]);
+                      InteractiveSmoothing=true);
 rng(seed);
 out = estimator.estimate();
 

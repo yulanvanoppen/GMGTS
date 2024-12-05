@@ -49,21 +49,28 @@ classdef Optimization < handle
 
         function beta = least_squares(SS, lb, ub, nstart, init)         % (Multistarted) numerical least squares
             ws = warning('off', 'MATLAB:nearlySingularMatrix');
-            if nargin == 5, nstart = 1; end
+            
+            options = Optimization.options_interiorpoint;                   % switch multistarts and options
+            if nargin == 5 && ~isempty(init)
+                nstart = 1;
+            elseif nargin < 5
+                options = Optimization.options_initialization;
+            end
+            
             value = Inf;
             for start = 1:nstart
-                if nargin == 5
+                if nargin == 5 && ~isempty(init)                            % switch initial point
                     loginit = log(init);
-                    options = Optimization.options_interiorpoint;
                 else                                                        % uniformly sample in log parameter space
                     loginit = rand(1, numel(lb)) .* (log(ub) - log(lb)) + log(lb);
-                    options = Optimization.options_initialization;
                 end
+                
                 [opt_new, value_new] = fmincon(@(logbeta) SS(exp(logbeta)), loginit, [], [], [], [], ...
                                                log(lb), log(ub), [], options);
                 if value_new < value, value = value_new; opt = opt_new; end
             end
             beta = exp(opt);                                                % transform back to normal scale
+            
             warning(ws)
         end
     end

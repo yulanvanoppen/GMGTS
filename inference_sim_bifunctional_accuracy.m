@@ -1,8 +1,4 @@
 %% Setup system ------------------------------------------------------------
-          
-
-% RESTORE NMULSTISTART GTS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 clearvars
 close all
@@ -10,7 +6,6 @@ close all
 system = System('model_bifunctional2.txt', FixedParameters=["k1" "k2" "k4" "k6"]);
 save('system_bifunctional_measurable.mat', 'system')
 load('system_bifunctional_measurable.mat')
-
 
 dt_values = [2.5 5 10 20];
 noise_levels = [.001 .005 .01 .02 .05 .1];
@@ -84,7 +79,7 @@ end
 
 
 mkdir('simulation')
-wsfile = 'simulation/bifunctional_accuracy2.mat';
+wsfile = 'simulation/bifunctional_accuracy3.mat';
 save(wsfile);
 
 
