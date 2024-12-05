@@ -51,7 +51,7 @@ See `System` and `Estimator` for a description of additional input arguments.
 &nbsp;
 
 
-### Smoothing app 
+### Interactive smoothing app 
 Passing the Name-Value argument `InteractiveSmoothing=true` to either `GMGTS()` or the `Estimator()` constructor causes the interactive smoothing app to start during estimation. This app provides quick visual feedback when selecting B-spline smoothing knots. Upon startup, the app window appears as follows.
 ![Smoothing app startup screen](app_startup.png)
 
