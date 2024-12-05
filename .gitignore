@@ -2,6 +2,5 @@
 *.asv
 *.mat
 *.fig
-*.png
 PLOT_*.m
 figures/
