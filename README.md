@@ -42,7 +42,7 @@ from measurements `(t_j, y_ij)`, where `y_ij` are vectors of observed components
 
 `out = GMGTS(model_file, data, t, observed, init, ...)` integrates the ODE system from the initial values given in `init` to make state predictions. If `data` is a struct, `init` is ignored and assumed to be a field of `data`.
 
-`out = GMGTS(_, 'Plot', false, ...)` disables plots with parameter estimates, the inferred random effects distribution, model predictions, and any smoothed measurements (enabled by default).
+`out = GMGTS(_, Plot=false, ...)` disables plots with parameter estimates, the inferred random effects distribution, model predictions, and any smoothed measurements (enabled by default).
 
 `[out, estimator] = GMGTS(model_file, data, ...)` also returns the instantiated `Estimator` object.
 
@@ -50,6 +50,25 @@ See `System` and `Estimator` for a description of additional input arguments.
 
 &nbsp;
 
+
+### Smoothing app 
+Passing the Name-Value argument `InteractiveSmoothing=true` to either `GMGTS()` or the `Estimator()` constructor causes the interactive smoothing app to start during estimation. This app provides quick visual feedback when selecting B-spline smoothing knots. Upon startup, the app window appears as follows.
+![Smoothing app startup screen](app_startup.png)
+
+Unless the arguments `AutomaticKnots=false` has been passed, the knot placement heuristic will guess appropriate knot locations for each state. The 'States(s)' dropdown menu is used to select the active state(s). When set to 'All', the settings for the first state are shown in the left panel. Modifying any setting will affect every state.
+
+Suppose we would like to clean up the wiggle at the end of the interval for state 'HpT'. After changing the 'States(s)' value, the right panel is focused on state 'HpT':
+![Smoothing app with a single state selected](app_single.png)
+
+It may be appropriate to remove the last knot; to do so, right click near the corresponding vertical line in the 'Manual knot selector' window (left clicking anywhere on the window adds a knot). The result looks as follows:
+![Smoothing app with a single state selected, after removing a knot](app_modified.png)
+
+Notice the curves are now smoother at the end of the interval, and that the '#Knots' slider has moved back. Alternatively, we could have dragged the '#Knots' slider to replace this state's set of knots with equidistant knots. To revert back to the heuristically placed knots for this state, click the 'Automatic knot placement' button. Once we are satisfied with this state's smoothing, we can return by setting the 'State(s)' dropdown menu to 'All':
+![Smoothing app with a all states, after having modified the smoothing for a single state](app_result.png)
+
+The number of displayed cells may be changed using the '#Cells' slider. This is useful to inspect the effect of the knot locations on example cells more closely. Finally, for large systems, smoothing may be too slow for interactivity. In this case, unchecking the 'Live' checkbox postpones any smoothing with updated settings until the 'Smooth' button is pressed. Once satisfied with the smoothing for each state, click the 'Finish' button to continue with the rest of the mixed-effect estimation.
+
+&nbsp;
 
 ### `System` class for ODE functions and simulations
 The `System` class handles ODE integration, evaluation of (functions derived from) the system's right-hand side, and corresponding partial derivatives as part of the Estimator and Generator classes.
