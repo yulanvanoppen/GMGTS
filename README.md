@@ -57,8 +57,8 @@ Passing the Name-Value argument `InteractiveSmoothing=true` to either `GMGTS()` 
 Upon startup, the app window appears as follows, containing the following interactive elements:
 - **[State(s)] dropdown menu:** Select state(s) to display and edit.
 - **[Automatic knot placement] button:** Click to override knots for the selected state(s) using the automatic knot placement heuristic.
-- **[#Knots] slider:** Number of knots for the selected state (first if set to 'All'); slide to override knots for the selected state(s) using equidistant knots.
-- **[Manual knot selector] window:** Displayed knot locations and resulting B-spline basis for the selected state (first if set to 'All'); LMB/RMB on the window to add/remove a knot for the selected state(s).
+- **[#Knots] slider:** Number of knots for the selected state (first if set to [All]); slide to override knots for the selected state(s) using equidistant knots.
+- **[Manual knot selector] window:** Displayed knot locations and resulting B-spline basis for the selected state (first if set to [All]); LMB/RMB on the window to add/remove a knot for the selected state(s).
 - **[#Cells to display] slider:** Number of cell trajectories to display; slide to adjust.
 - **[Smooth] button:** Click to smooth data using current settings (disabled when [Live] is checked).
 - **[Live] checkbox:** Toggle continuous smoothing, disable when system size impedes interactivity.
