@@ -17,7 +17,7 @@ seed = 1;
 correlation = eye(6) + diag([.5 0 .5 0 .5], 1) + diag([.5 0 .5 0 .5], -1);
 D = .01 * system.k0 .* system.k0' .* correlation;
 
-generator = Generator(system, N=100, t=0:5:100, error_std=.05, D=D, observed=observed);
+generator = Generator(system, N=10, t=0:1:100, error_std=.01, D=D, observed=observed);
 
 rng(seed);
 [data, ground_truth] = generator.generate();
@@ -31,7 +31,7 @@ methods = [methods "GMGTS"];
 % methods = [methods "GTS"];
 
 estimator = Estimator(system, data, Stages=2, Methods=methods,...
-                      Knots=linspace(0, 100, 14));
+                      Knots=linspace(0, 100, 14), TestConvergence=true, MaxIterationsFS=50, ConvergenceTolFs=1e-8);
 rng(seed);
 estimator.estimate();
 
@@ -49,7 +49,7 @@ hellinger_GMGTS_GTS = [GMGTS_hellinger GTS_hellinger]
 wasserstein_GMGTS_GTS = [GMGTS_wasserstein GTS_wasserstein]
 
 close all
-% plot(estimator, True=ground_truth, States=1:9, MaxCells=7)
+plot(estimator, True=ground_truth, States=1:9, MaxCells=7)
 
 
 

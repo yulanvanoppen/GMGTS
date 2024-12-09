@@ -9,7 +9,7 @@ close all
 
 first_obs = 2;
 
-figure('Position', [100, 100, 560, 420])
+figure( 'Position', [100, 100, 560, 420])
 xgroupdata = repmat(repmat(1:6, 10, 1), 6, 1);
 ydata = -2*ones([size(hellinger_GMGTS(:, :, :, first_obs), [1 2]) 6]);
 ydata(:, :, 2:end-1) = -hellinger_GMGTS(:, :, :, first_obs);
@@ -282,7 +282,7 @@ set(groot,'defaulttextinterpreter','latex');
 set(groot,'defaultLegendInterpreter','latex');
 
 % load('simulation/maturation_accuracy2.mat');
-load('simulation/bifunctional_accuracy2.mat');
+load('simulation/bifunctional_accuracy.mat');
 
 close all
 
@@ -339,7 +339,7 @@ set(groot,'defaulttextinterpreter','latex');
 set(groot,'defaultLegendInterpreter','latex');
 
 % load('simulation/maturation_accuracy2.mat');
-load('simulation/bifunctional_accuracy2.mat');
+load('simulation/bifunctional_accuracy.mat');
 
 close all
 

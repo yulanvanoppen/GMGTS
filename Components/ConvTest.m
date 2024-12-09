@@ -1,3 +1,9 @@
+% start with GLV Jacobians + Convergence
+% maturation: Jacobian unstable + Convergence plot
+% possibly Jacobians for other systems
+% experimental data Jacobians
+
+
 classdef ConvTest < handle
     properties (SetAccess = private)
         data                                                                % data aggregate struct
@@ -43,8 +49,8 @@ classdef ConvTest < handle
             obj.dsmoothed_fitted(:, obj.data.observed, :) = obj.data.dsmoothed;
             
 %             obj.Lipschitz()
-%             obj.contraction();
-            obj.attraction();         
+            obj.contraction();
+%             obj.attraction();         
 
 %             %%%%%%%%%%%%%%% BTCS
 %             figure
@@ -148,7 +154,7 @@ classdef ConvTest < handle
                 
                 if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
                 obj.estimate_covariances(2);                                % residual covariance estimation
-                obj.update_parameters(2);                                   % gradient matching
+                obj.update_parameters();                                    % gradient matching
 
                 evals_pm_eps(p, :, 1, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, obj.N);
                 
@@ -159,14 +165,14 @@ classdef ConvTest < handle
                 
                 if obj.L < obj.system.K, obj.integrate; end                 % ODE integration
                 obj.estimate_covariances(2);                                % residual covariance estimation
-                obj.update_parameters(2);                                   % gradient matching
+                obj.update_parameters();                                    % gradient matching
 
                 evals_pm_eps(p, :, 2, :) = reshape(obj.beta_fs', 1, obj.system.P, 1, obj.N);
             end
                                                                             % restructure for rhs evaluations
             eps_denom = 1./reshape(2*epsilon, obj.system.P, 1, 1, obj.N);   % finite difference approximations
             partials_beta_fs = permute((evals_pm_eps(:, :, 1, :) - evals_pm_eps(:, :, 2, :)) .* eps_denom, [1 2 4 3]);
-            criteria_beta_fs = permute(sum(abs(partials_beta_fs)), [3 2 1]);
+            criteria_beta_fs = permute(sum(abs(partials_beta_fs)), [3 2 1])
 
         end
         
@@ -257,38 +263,38 @@ classdef ConvTest < handle
                 legend('convergence', 'divergence', 'population', 'cell')
             end
             
-            colors = .5 * ones(sample_size, 3, obj.N);
-            for i = 1:obj.N
-                colors(converged_sample(:, i), :, i) = repmat([0 0.4470 0.7410], sum(converged_sample(:, i)), 1);
-                colors(diverged_sample(:, i) & ~converged_sample(:, i), :, i) = ...
-                    repmat([0.6350 0.0780 0.1840], sum(diverged_sample(:, i) & ~converged_sample(:, i)), 1);
-            end
-            colors(:, 4, :) = .5;
-            
-            figure
-            tiledlayout(2, 5)
-            for i = 1:10
-                nexttile(i)
-                h1 = plot([sample(:, 1)'; reshape(beta_sample(:, 1, :, i), sample_size, n_iter)'], ...
-                         [sample(:, 2)'; reshape(beta_sample(:, 2, :, i), sample_size, n_iter)']);
-                set(h1, {'color'}, num2cell(colors(:, :, i), 2));
-                hold on
-                h = plot(repmat(beta_sample(:, 1, end, i)', 2, 1), repmat(beta_sample(:, 2, end, i)', 2, 1), 'o');
-                set(h, {'color'}, num2cell(colors(:, :, i), 2));
-                h2 = scatter(obj.data.beta_fs(:, 1), obj.data.beta_fs(:, 2), 300, '.', MarkerEdgeColor="#D95319");
-                h3 = plot(obj.data.beta_fs(i, 1), obj.data.beta_fs(i, 2), '.', MarkerSize=30, Color="#7E2F8E");
-                title(sprintf('Cell %d', i))
-                xlabel('kp')
-                ylabel('km')
-                
-                legend([h1(1) h2 h3], 'paths', 'population', 'cell')
-            end
-            
-            figure
-            h = plot(repmat(beta_sample(:, 1, end, 1), 1, 2)', repmat(beta_sample(:, 2, end, 1), 1, 2)', 'o');
-            set(h, {'color'}, num2cell(colors(:, :, 1), 2));
-            hold on
-            plot(obj.data.beta_fs(1, 1), obj.data.beta_fs(1, 2), '.', MarkerSize=30, Color="#7E2F8E")
+%             colors = .5 * ones(sample_size, 3, obj.N);
+%             for i = 1:obj.N
+%                 colors(converged_sample(:, i), :, i) = repmat([0 0.4470 0.7410], sum(converged_sample(:, i)), 1);
+%                 colors(diverged_sample(:, i) & ~converged_sample(:, i), :, i) = ...
+%                     repmat([0.6350 0.0780 0.1840], sum(diverged_sample(:, i) & ~converged_sample(:, i)), 1);
+%             end
+%             colors(:, 4, :) = .5;
+%             
+%             figure
+%             tiledlayout(2, 5)
+%             for i = 1:10
+%                 nexttile(i)
+%                 h1 = plot([sample(:, 1)'; reshape(beta_sample(:, 1, :, i), sample_size, n_iter)'], ...
+%                          [sample(:, 2)'; reshape(beta_sample(:, 2, :, i), sample_size, n_iter)']);
+%                 set(h1, {'color'}, num2cell(colors(:, :, i), 2));
+%                 hold on
+%                 h = plot(repmat(beta_sample(:, 1, end, i)', 2, 1), repmat(beta_sample(:, 2, end, i)', 2, 1), 'o');
+%                 set(h, {'color'}, num2cell(colors(:, :, i), 2));
+%                 h2 = scatter(obj.data.beta_fs(:, 1), obj.data.beta_fs(:, 2), 300, '.', MarkerEdgeColor="#D95319");
+%                 h3 = plot(obj.data.beta_fs(i, 1), obj.data.beta_fs(i, 2), '.', MarkerSize=30, Color="#7E2F8E");
+%                 title(sprintf('Cell %d', i))
+%                 xlabel('kp')
+%                 ylabel('km')
+%                 
+%                 legend([h1(1) h2 h3], 'paths', 'population', 'cell')
+%             end
+%             
+%             figure
+%             h = plot(repmat(beta_sample(:, 1, end, 1), 1, 2)', repmat(beta_sample(:, 2, end, 1), 1, 2)', 'o');
+%             set(h, {'color'}, num2cell(colors(:, :, 1), 2));
+%             hold on
+%             plot(obj.data.beta_fs(1, 1), obj.data.beta_fs(1, 2), '.', MarkerSize=30, Color="#7E2F8E")
             
 
             disp(1)

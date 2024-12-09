@@ -116,7 +116,7 @@ for idx = 1:length(data)
     data(idx).init = system.x0' + 1e-8;
     data(idx).observed = system.K;
     estimator = Estimator(system, data(idx), Methods=methods, Knots=knots, MaxIterationsFS=20, ...
-                          LB=[.001 .001], UB=[20 1], LogNormal=true);
+                          LB=[.001 .001], UB=[20 1], LogNormal=true, TestConvergence=true);
     
     rng(0);
     estimator.estimate();

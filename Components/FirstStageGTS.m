@@ -38,7 +38,7 @@ classdef FirstStageGTS < handle
             obj.varbeta = repmat(eye(system.P), 1, 1, obj.N);
             obj.sigma2 = zeros(1, obj.L);
             obj.tau2 = zeros(1, obj.L);
-            obj.variances_fs = ones(obj.T, obj.L, obj.N);
+            obj.variances_fs = data.traces.^2;                              % initialize multiplicative only
             
             obj.convergence_steps = ones(1, obj.N);                         % ensure no cells are considered converged
             obj.not_converged = 1:obj.N;
@@ -141,6 +141,7 @@ classdef FirstStageGTS < handle
                 
                 obj.variances_fs(:, k, :) = reshape(design * coefficients', obj.T, 1, obj.N);
             end
+%             obj.variances_fs = obj.data.noisevar;%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         end
         
         

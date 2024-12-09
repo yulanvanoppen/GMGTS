@@ -9,10 +9,10 @@ load('system_maturation_delay.mat')
 
 first_obs = 2;
 dt = 10;
-noise_level = .01;
+noise_level = .001;
 seed = 1;
-
-generator = Generator(system, N=10, t=unique([0 5 10 20 dt:dt:200]), error_std=noise_level, ...
+% t=unique([0 5 10 20 dt:dt:200])
+generator = Generator(system, N=10, t=0:200, error_std=noise_level, ...
                       D_mult=.25, observed=first_obs:system.K);
 rng(seed);
 [data, ground_truth] = generator.generate();
@@ -27,7 +27,7 @@ methods = [methods "GMGTS"];
 
 % estimator = Estimator(system, data, Stages=2, Methods=methods, Knots=[10 20 60 120 180]);
 estimator = Estimator(system, data, Stages=2, Methods=methods, Knots=[10 20 60 120], ...
-                      TestConvergence=true, ConvergenceTolFs=1e-5, MaxIterationsFS=10);
+                      TestConvergence=true, ConvergenceTolFs=1e-8, MaxIterationsFS=100);
 % estimator = Estimator(system, data, Stages=2, Methods=methods);
 
 rng(seed);

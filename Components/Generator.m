@@ -192,6 +192,7 @@ classdef Generator < handle
             add = normrnd(0, obj.settings.error_const, size(obj.data.original));
             mul = normrnd(0, obj.settings.error_std, size(obj.data.original));
             obj.data.traces = add + obj.data.original .* (1+mul);           % additive/multiplicative measurement noise
+            obj.data.noisevar = obj.settings.error_const^2 + obj.settings.error_std^2 * obj.data.original.^2;
 
             [measurements, ground_truth] = obj.separate();
         end

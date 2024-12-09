@@ -8,15 +8,14 @@ close all
 load('system_bifunctional_measurable.mat')
 
 first_obs = 1;
-dt = 10;
-noise_level = .05;
+dt = 2.5;
+noise_level = .01;
 seed = 2;
 
-generator = Generator(system, N=200, t=unique([0 2.5 5 dt:dt:100]), error_std=noise_level, ...
+generator = Generator(system, N=10, t=unique([0 2.5 5 dt:dt:100]), error_std=noise_level, ...
                       D_mult=.25, observed=first_obs:system.K);
 rng(seed);
 [data, ground_truth] = generator.generate();
-data.beta = ground_truth.beta;
 % plot(generator)
 
 
@@ -26,8 +25,8 @@ methods = [];
 methods = [methods "GMGTS"];
 % methods = [methods "GTS"];
 
-estimator = Estimator(system, data, Stages=2, Methods=methods, NMultiStartFS=10, ...
-                      InteractiveSmoothing=true);
+estimator = Estimator(system, data, Stages=2, Methods=methods, ...
+                      TestConvergence=true);
 rng(seed);
 out = estimator.estimate();
 

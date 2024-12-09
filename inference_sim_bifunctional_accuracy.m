@@ -18,10 +18,15 @@ seeds = 1:10;
 [ws_GMGTS, ws_GTS, ws_truth, wsu_GMGTS, wsu_GTS, wsu_truth, ...
  he_GMGTS, he_GTS, he_truth, times_GMGTS, times_GTS] = deal(zeros(length(seeds), length(noise_levels), length(dt_values), 2));
 
-% % % load('simulation/bifunctional_accuracy.mat')
-
+load('simulation/bifunctional_accuracy4.mat')
+ 
 for first_obs = [1 3]
-    for dt_idx = 1:length(dt_values)
+    if first_obs == 1
+        dt_indices = 4;
+    else
+        dt_indices = 1:length(dt_values);
+    end
+    for dt_idx = dt_indices
         for noise_idx = 1:length(noise_levels)
             for seed = seeds
                 dt = dt_values(dt_idx);
@@ -74,12 +79,14 @@ for first_obs = [1 3]
                 times_GTS(max(1, seed), noise_idx, dt_idx, first_idx) = times_GMGTS_GTS(2);
             end
         end
+        wsfile = 'simulation/bifunctional_accuracy.mat';
+    save(wsfile);   
     end
 end
 
 
 mkdir('simulation')
-wsfile = 'simulation/bifunctional_accuracy3.mat';
+wsfile = 'simulation/bifunctional_accuracy.mat';
 save(wsfile);
 
 
