@@ -18,15 +18,10 @@ seeds = 1:10;
 [ws_GMGTS, ws_GTS, ws_truth, wsu_GMGTS, wsu_GTS, wsu_truth, ...
  he_GMGTS, he_GTS, he_truth, times_GMGTS, times_GTS] = deal(zeros(length(seeds), length(noise_levels), length(dt_values), 2));
 
-load('simulation/bifunctional_accuracy4.mat')
+load('simulation/bifunctional_accuracy.mat')
  
-for first_obs = [1 3]
-    if first_obs == 1
-        dt_indices = 4;
-    else
-        dt_indices = 1:length(dt_values);
-    end
-    for dt_idx = dt_indices
+for first_obs = 3
+    for dt_idx = 1:length(dt_values)
         for noise_idx = 1:length(noise_levels)
             for seed = seeds
                 dt = dt_values(dt_idx);
@@ -38,7 +33,7 @@ for first_obs = [1 3]
 
                 first_idx = min(first_obs, 2);
                 
-                rng(1000*first_idx + 100*dt_idx + 10*noise_idx + seed - 1110 - (min(seeds) > 0));
+                rng(10000 + 1000*first_idx + 100*dt_idx + 10*noise_idx + seed - 1110 - (min(seeds) > 0));
                 
                 [data, ground_truth] = generator.generate();
 
@@ -46,10 +41,11 @@ for first_obs = [1 3]
 
                 methods = [];
                 methods = [methods "GMGTS"];
-                methods = [methods "GTS"];
+%                 methods = [methods "GTS"];
 
                 estimator = Estimator(system, data, Methods=methods, Knots=[0 2.5 40]);
-                [GMGTS, GTS] = estimator.estimate('silent');
+%                 [GMGTS, GTS] = estimator.estimate('silent');
+                GMGTS = estimator.estimate('silent');
 
                 GMGTS_wasserstein = wsdist(GMGTS.b, GMGTS.D, ground_truth.b, ground_truth.D);
                 GMGTS_wasserstein_unscaled = wsdist(GMGTS.b, GMGTS.D, ground_truth.b, ground_truth.D, false);
@@ -58,35 +54,35 @@ for first_obs = [1 3]
                 wsu_GMGTS(max(1, seed), noise_idx, dt_idx, first_idx) = GMGTS_wasserstein_unscaled;
                 he_GMGTS(max(1, seed), noise_idx, dt_idx, first_idx) = GMGTS_hellinger;
                 
-                truth_wasserstein = wsdist(mean(ground_truth.beta),cov(ground_truth.beta), ground_truth.b, ground_truth.D, false);
-                truth_wasserstein_unscaled = wsdist(mean(ground_truth.beta),cov(ground_truth.beta), ground_truth.b, ground_truth.D, false);
-                truth_hellinger = hedist(mean(ground_truth.beta),cov(ground_truth.beta), ground_truth.b, ground_truth.D);
-                ws_truth(max(1, seed), noise_idx, dt_idx, first_idx) = truth_wasserstein;
-                wsu_truth(max(1, seed), noise_idx, dt_idx, first_idx) = truth_wasserstein_unscaled;
-                he_truth(max(1, seed), noise_idx, dt_idx, first_idx) = truth_hellinger;
+%                 truth_wasserstein = wsdist(mean(ground_truth.beta),cov(ground_truth.beta), ground_truth.b, ground_truth.D, false);
+%                 truth_wasserstein_unscaled = wsdist(mean(ground_truth.beta),cov(ground_truth.beta), ground_truth.b, ground_truth.D, false);
+%                 truth_hellinger = hedist(mean(ground_truth.beta),cov(ground_truth.beta), ground_truth.b, ground_truth.D);
+%                 ws_truth(max(1, seed), noise_idx, dt_idx, first_idx) = truth_wasserstein;
+%                 wsu_truth(max(1, seed), noise_idx, dt_idx, first_idx) = truth_wasserstein_unscaled;
+%                 he_truth(max(1, seed), noise_idx, dt_idx, first_idx) = truth_hellinger;
                 
-                GTS_wasserstein = wsdist(GTS.b, GTS.D, ground_truth.b, ground_truth.D);
-                GTS_wasserstein_unscaled = wsdist(GTS.b, GTS.D, ground_truth.b, ground_truth.D, false);
-                GTS_hellinger = hedist(GTS.b, GTS.D, ground_truth.b, ground_truth.D);
-                ws_GTS(max(1, seed), noise_idx, dt_idx, first_idx) = GTS_wasserstein;
-                wsu_GTS(max(1, seed), noise_idx, dt_idx, first_idx) = GTS_wasserstein_unscaled;
-                he_GTS(max(1, seed), noise_idx, dt_idx, first_idx) = GTS_hellinger;
+%                 GTS_wasserstein = wsdist(GTS.b, GTS.D, ground_truth.b, ground_truth.D);
+%                 GTS_wasserstein_unscaled = wsdist(GTS.b, GTS.D, ground_truth.b, ground_truth.D, false);
+%                 GTS_hellinger = hedist(GTS.b, GTS.D, ground_truth.b, ground_truth.D);
+%                 ws_GTS(max(1, seed), noise_idx, dt_idx, first_idx) = GTS_wasserstein;
+%                 wsu_GTS(max(1, seed), noise_idx, dt_idx, first_idx) = GTS_wasserstein_unscaled;
+%                 he_GTS(max(1, seed), noise_idx, dt_idx, first_idx) = GTS_hellinger;
                 
                 ws_GMGTS_GTS = [GMGTS_wasserstein GTS_wasserstein]
-                times_GMGTS_GTS = [sum(estimator.results_GMGTS.time) sum(estimator.results_GTS.time)]
+%                 times_GMGTS_GTS = [sum(estimator.results_GMGTS.time) sum(estimator.results_GTS.time)]
                 
-                times_GMGTS(max(1, seed), noise_idx, dt_idx, first_idx) = times_GMGTS_GTS(1);
-                times_GTS(max(1, seed), noise_idx, dt_idx, first_idx) = times_GMGTS_GTS(2);
+                times_GMGTS(max(1, seed), noise_idx, dt_idx, first_idx) = sum(estimator.results_GMGTS.time)%times_GMGTS_GTS(1);
+%                 times_GTS(max(1, seed), noise_idx, dt_idx, first_idx) = times_GMGTS_GTS(2);
             end
         end
-        wsfile = 'simulation/bifunctional_accuracy.mat';
+        wsfile = 'simulation/bifunctional_accuracy2.mat';
     save(wsfile);   
     end
 end
 
 
 mkdir('simulation')
-wsfile = 'simulation/bifunctional_accuracy.mat';
+wsfile = 'simulation/bifunctional_accuracy2.mat';
 save(wsfile);
 
 

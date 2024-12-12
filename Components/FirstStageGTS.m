@@ -38,7 +38,7 @@ classdef FirstStageGTS < handle
             obj.varbeta = repmat(eye(system.P), 1, 1, obj.N);
             obj.sigma2 = zeros(1, obj.L);
             obj.tau2 = zeros(1, obj.L);
-            obj.variances_fs = data.traces.^2;                              % initialize multiplicative only
+            obj.variances_fs = data.traces.^2 + .1*mean(data.traces).^2;    % initialize mostly multiplicative
             
             obj.convergence_steps = ones(1, obj.N);                         % ensure no cells are considered converged
             obj.not_converged = 1:obj.N;
@@ -87,11 +87,11 @@ classdef FirstStageGTS < handle
                 SS = @(beta) obj.squares_sum(beta, obj.data.traces(obj.settings.optindices, :, i), ...
                                                    obj.variances_fs(obj.settings.optindices, :, i));
                                                
-                if iter == 1                                                % multistart every cell (for TCS)
-                    obj.beta_fs(i, :) = Optimization.least_squares(SS, obj.settings.lb, obj.settings.ub, 5, []);
-                else
+%                 if iter == 1                                                % multistart every cell (for TCS)
+%                     obj.beta_fs(i, :) = Optimization.least_squares(SS, obj.settings.lb, obj.settings.ub, 5, []);
+%                 else
                     obj.beta_fs(i, :) = Optimization.least_squares(SS, obj.settings.lb, obj.settings.ub, 1, obj.beta_fs(i, :));
-                end
+%                 end
             end
             obj.fitted_fs = obj.system.integrate(obj.beta_fs, obj.data);    % compute predicted trajectories
             if obj.settings.positive
@@ -141,7 +141,6 @@ classdef FirstStageGTS < handle
                 
                 obj.variances_fs(:, k, :) = reshape(design * coefficients', obj.T, 1, obj.N);
             end
-%             obj.variances_fs = obj.data.noisevar;%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         end
         
         

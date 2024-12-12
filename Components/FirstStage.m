@@ -217,7 +217,7 @@ classdef FirstStage < handle
             df_dX_all = obj.system.df(obj.data.smoothed, obj.data.t, obj.beta_fs);
             
             for i = obj.not_converged                                       % estimated measurement error variances
-                S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
+                S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-10));
                 var_delta = tryinv(Z' * (S \ Z));                           % spline coefficient uncertainty
                 var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
                 
@@ -253,7 +253,7 @@ classdef FirstStage < handle
             end
             
             for i = 1:obj.N                                                 % estimated measurement error variances
-                S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
+                S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-10));
                 var_delta = tryinv(Z' * (S \ Z));                           % spline coefficient uncertainty
                 var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
                 
@@ -337,7 +337,7 @@ classdef FirstStage < handle
                 df_dbeta = reshape(df_dbeta_all(:, :, :, i), [], obj.system.P);
 
                 if rep == 1                                                 % smoothing covariance
-                    S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
+                    S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-10));
                     var_delta = tryinv(Z' * (S \ Z));
                     var_XOdXO = [Z_fs; dZ_fs] * var_delta * [Z_fs; dZ_fs]';
 

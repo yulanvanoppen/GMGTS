@@ -50,22 +50,7 @@ classdef ConvTest < handle
             
 %             obj.Lipschitz()
             obj.contraction();
-%             obj.attraction();         
-
-%             %%%%%%%%%%%%%%% BTCS
-%             figure
-%             tiledlayout(3, 3)
-%             for x = 1:3
-%                 for y = x+1:4
-%                     nexttile(x + (y-2)*3)
-%                     plot(flatten(obj.data.beta_fs_history(1, x, :)), flatten(obj.data.beta_fs_history(1, y, :)), 'o-')
-%                     xlabel(obj.system.parameters_variable(x))
-%                     ylabel(obj.system.parameters_variable(y))
-%                 end
-%             end
-
-%             obj.data.convergence_starts = sample;
-%             obj.data.convergence_evaluations = f_sample;
+            obj.attraction();         
 
             output = obj.data;                                              % return data appended with FS results
         end
@@ -179,13 +164,13 @@ classdef ConvTest < handle
         
         function attraction(obj)
             proposal_mu = obj.data.b_est;
-            proposal_Sigma = obj.data.D_est*2;
+            proposal_Sigma = 4*obj.data.D_est;
             proposal_sigma = sqrt(diag(proposal_Sigma))';
-            ranges = [proposal_mu - 2*proposal_sigma; proposal_mu + 2*proposal_sigma];
+            ranges = [proposal_mu - 1.75*proposal_sigma; proposal_mu + 1.75*proposal_sigma];
             
             n_points = 21;
             sample_size = n_points^obj.system.P;
-            n_iter = 50;
+            n_iter = 20;
             conv_thresh = .05;
             
 %             sample = max(1e-8, mvnrnd(proposal_mu, proposal_Sigma, sample_size));
@@ -244,23 +229,260 @@ classdef ConvTest < handle
             for i = 1:obj.N, attraction_basins{i} = sample(converged_sample(:, i), :); end
             for i = 1:obj.N, divergence{i} = sample(diverged_sample(:, i) & ~converged_sample(:, i), :); end
             
+            
+            cells = [2 3 4 8 9];
+            
             close all
-            figure
-            tiledlayout(2, 5)
-            for i = 1:10
-                nexttile(i)
-                scatter(attraction_basins{i}(:, 1), attraction_basins{i}(:, 2), 1000, ...
+            figure(Position=[100 100 800 500])
+            tiledlayout(2, 3)
+            nexttile
+            scatter(obj.data.beta_fs(:, 1), obj.data.beta_fs(:, 2), 100, '.', MarkerEdgeColor="#AAAAAA")
+            hold on
+            plot(obj.data.beta_fs(cells, 1), obj.data.beta_fs(cells, 2), '.', MarkerEdgeColor="#D95319", MarkerSize=30)
+            xlabel('$\mathsf{k_p}$', 'interpreter', 'latex')
+            ylabel('$\mathsf{k_m}$', 'interpreter', 'latex')
+            ylim([0 .04])
+            xlim([0 .04])
+            legend('\textsf{population}', '$\mathsf{\hat{\beta}_1, \ldots, \hat{\beta}_5}$', 'interpreter', 'latex')
+            
+            for i = 1:5
+                nexttile(i+1)
+                scatter(attraction_basins{cells(i)}(:, 1), attraction_basins{cells(i)}(:, 2), 100, ...
                         'filled', MarkerFaceAlpha=.1, MarkerEdgeAlpha=.1, MarkerFaceColor="#0072BD")
                 hold on
-                scatter(divergence{i}(:, 1), divergence{i}(:, 2), 1000, ...
-                        'filled', MarkerFaceAlpha=.1, MarkerEdgeAlpha=.1, MarkerFaceColor="#A2142F")
-                scatter(obj.data.beta_fs(:, 1), obj.data.beta_fs(:, 2), 300, '.', MarkerEdgeColor="#D95319")
-                plot(obj.data.beta_fs(i, 1), obj.data.beta_fs(i, 2), '.', 'MarkerSize', 30)
+%                 scatter(divergence{i}(:, 1), divergence{i}(:, 2), 1000, ...
+%                         'filled', MarkerFaceAlpha=.1, MarkerEdgeAlpha=.1, MarkerFaceColor="#A2142F")
+%                 scatter(obj.data.beta_fs(:, 1), obj.data.beta_fs(:, 2), 300, '.', MarkerEdgeColor="#D95319")
+                plot(obj.data.beta_fs_history(1, 1, 1), obj.data.beta_fs(1, 2, 1), '^', ...
+                     MarkerEdgeColor="#EDB120", MarkerFaceColor="#EDB120", MarkerSize=10)
+                plot(obj.data.beta_fs(cells(i), 1), obj.data.beta_fs(cells(i), 2), '.', MarkerEdgeColor="#D95319", MarkerSize=30)
                 title(sprintf('Cell %d', i))
-                xlabel('kp')
-                ylabel('km')
+                xlabel('$\mathsf{k_p}$', 'interpreter', 'latex')
+                ylabel('$\mathsf{k_m}$', 'interpreter', 'latex')
+                ylim([0 .04])
+                xlim([0 .04])
                 
-                legend('convergence', 'divergence', 'population', 'cell')
+                if i==1
+                    legend('\textsf{convergence}', '$\mathsf{\hat{\beta}_i}$', '$\mathsf{\hat{\beta}^0}$', 'interpreter', 'latex')
+                end
+            end
+            
+            disp(1)
+        end
+        
+        
+        function attraction_maturation(obj)
+            proposal_mu = obj.data.b_est;
+            proposal_Sigma = obj.data.D_est;
+            proposal_sigma = sqrt(diag(proposal_Sigma))';
+            ranges = [proposal_mu - 1.75*proposal_sigma; proposal_mu + 1.75*proposal_sigma];
+            
+            n_points = 21;
+            sample_size = n_points^obj.system.P;
+            n_iter = 20;
+            conv_thresh = .05;
+            
+%             sample = max(1e-8, mvnrnd(proposal_mu, proposal_Sigma, sample_size));
+            sample = [kron(linspace(ranges(1, 1), ranges(2, 1), n_points)', ones(n_points, 1)), ...
+                      repmat(linspace(ranges(1, 2), ranges(2, 2), n_points)', n_points, 1)];
+            if obj.settings.lognormal, sample = exp(sample); end
+            
+            beta_sample = zeros(sample_size, obj.system.P, n_iter, obj.N);
+            init_sample = zeros(sample_size, obj.N);
+            steps_sample = zeros(sample_size, obj.N);
+            
+            attraction_basins = repmat({zeros(0, obj.system.P)}, 1, obj.N);
+            divergence = repmat({zeros(0, obj.system.P)}, 1, obj.N);
+            
+            for idx = 1:sample_size
+                fprintf('%d ', idx)
+                if ~mod(idx, 10), fprintf('\n'), end
+
+                obj.beta_fs = repmat(sample(idx, :), obj.N, 1);             % copy to each cell
+                obj.V = repmat(eye(obj.system.K * obj.T), 1, 1, obj.N);
+                obj.varXdX = zeros(2 * obj.system.K * obj.T, 2 * obj.system.K * obj.T, obj.N);
+                obj.varbeta =  repmat(eye(obj.system.P), 1, 1, obj.N);
+                
+                if obj.system.P > 1                                     % compute relative iteration steps
+                    init_sample(idx, :) = vecnorm((obj.data.beta_fs - obj.beta_fs)') ./ vecnorm(obj.data.beta_fs');
+                else
+                    init_sample(idx, :) = abs(obj.data.beta_fs' - obj.beta_fs') ./ abs(obj.data.beta_fs');
+                end
+
+                for iter = 1:n_iter
+                    if obj.L < obj.system.K, obj.integrate; end             % ODE integration
+                    obj.estimate_covariances(iter);                         % residual covariance estimation
+                    obj.update_parameters();                                % gradient matching
+                    
+                    if obj.system.P > 1                                     % compute relative iteration steps
+                        obj.convergence_steps = vecnorm((obj.data.beta_fs - obj.beta_fs)') ./ vecnorm(obj.data.beta_fs');
+                    else
+                        obj.convergence_steps = abs(obj.data.beta_fs' - obj.beta_fs') ./ abs(obj.data.beta_fs');
+                    end
+                    
+                    beta_sample(idx, :, iter, :) = reshape(obj.beta_fs', 1, obj.system.P, obj.N);
+                   
+                    if max(obj.convergence_steps) < conv_thresh
+                        beta_sample(idx, :, iter+1:end, :) = repmat(beta_sample(idx, :, iter, :), 1, 1, n_iter-iter);
+                        disp('break')
+                        break
+                    end
+                end
+
+                steps_sample(idx, :) = obj.convergence_steps;
+            end
+            
+            converged_sample = steps_sample < conv_thresh;
+            diverged_sample = steps_sample > init_sample; 
+
+            for i = 1:obj.N, attraction_basins{i} = sample(converged_sample(:, i), :); end
+            for i = 1:obj.N, divergence{i} = sample(diverged_sample(:, i) & ~converged_sample(:, i), :); end
+            
+            
+            cells = [2 3 4 8 9];
+            
+            close all
+            figure(Position=[100 100 800 500])
+            tiledlayout(2, 3)
+            nexttile
+            scatter(obj.data.beta_fs(:, 1), obj.data.beta_fs(:, 2), 100, '.', MarkerEdgeColor="#AAAAAA")
+            hold on
+            plot(obj.data.beta_fs(cells, 1), obj.data.beta_fs(cells, 2), '.', MarkerEdgeColor="#D95319", MarkerSize=30)
+            xlabel('$\mathsf{k_p}$', 'interpreter', 'latex')
+            ylabel('$\mathsf{k_m}$', 'interpreter', 'latex')
+            ylim([.027 .069])
+            xlim([0.013 .036])
+            legend('\textsf{population}', '$\mathsf{\hat{\beta}_1, \ldots, \hat{\beta}_5}$', 'interpreter', 'latex')
+            
+            for i = 1:5
+                nexttile(i+1)
+                scatter(attraction_basins{cells(i)}(:, 1), attraction_basins{cells(i)}(:, 2), 100, ...
+                        'filled', MarkerFaceAlpha=.1, MarkerEdgeAlpha=.1, MarkerFaceColor="#0072BD")
+                hold on
+%                 scatter(divergence{i}(:, 1), divergence{i}(:, 2), 1000, ...
+%                         'filled', MarkerFaceAlpha=.1, MarkerEdgeAlpha=.1, MarkerFaceColor="#A2142F")
+%                 scatter(obj.data.beta_fs(:, 1), obj.data.beta_fs(:, 2), 300, '.', MarkerEdgeColor="#D95319")
+                plot(obj.data.beta_fs_history(1, 1, 1), obj.data.beta_fs(1, 2, 1), '^', ...
+                     MarkerEdgeColor="#EDB120", MarkerFaceColor="#EDB120", MarkerSize=10)
+                plot(obj.data.beta_fs(cells(i), 1), obj.data.beta_fs(cells(i), 2), '.', MarkerEdgeColor="#D95319", MarkerSize=30)
+                title(sprintf('Cell %d', i))
+                xlabel('$\mathsf{k_p}$', 'interpreter', 'latex')
+                ylabel('$\mathsf{k_m}$', 'interpreter', 'latex')
+                ylim([.027 .069])
+                xlim([0.013 .036])
+                
+                if i==1
+                    legend('\textsf{convergence}', '$\mathsf{\hat{\beta}_i}$', '$\mathsf{\hat{\beta}^0}$', 'interpreter', 'latex')
+                end
+            end
+            
+            disp(1)
+        end
+        
+        
+        function attraction_empirical(obj)
+            proposal_mu = obj.data.b_est;
+            proposal_Sigma = obj.data.D_est;
+            proposal_sigma = sqrt(diag(proposal_Sigma))';
+            ranges = [proposal_mu - 1.75*proposal_sigma; proposal_mu + 1.75*proposal_sigma];
+            
+            n_points = 21;
+            sample_size = n_points^obj.system.P;
+            n_iter = 20;
+            conv_thresh = .05;
+            
+%             sample = max(1e-8, mvnrnd(proposal_mu, proposal_Sigma, sample_size));
+            sample = [kron(linspace(ranges(1, 1), ranges(2, 1), n_points)', ones(n_points, 1)), ...
+                      repmat(linspace(ranges(1, 2), ranges(2, 2), n_points)', n_points, 1)];
+            if obj.settings.lognormal, sample = exp(sample); end
+            
+            beta_sample = zeros(sample_size, obj.system.P, n_iter, obj.N);
+            init_sample = zeros(sample_size, obj.N);
+            steps_sample = zeros(sample_size, obj.N);
+            
+            attraction_basins = repmat({zeros(0, obj.system.P)}, 1, obj.N);
+            divergence = repmat({zeros(0, obj.system.P)}, 1, obj.N);
+            
+            for idx = 1:sample_size
+                fprintf('%d ', idx)
+                if ~mod(idx, 10), fprintf('\n'), end
+
+                obj.beta_fs = repmat(sample(idx, :), obj.N, 1);             % copy to each cell
+                obj.V = repmat(eye(obj.system.K * obj.T), 1, 1, obj.N);
+                obj.varXdX = zeros(2 * obj.system.K * obj.T, 2 * obj.system.K * obj.T, obj.N);
+                obj.varbeta =  repmat(eye(obj.system.P), 1, 1, obj.N);
+                
+                if obj.system.P > 1                                     % compute relative iteration steps
+                    init_sample(idx, :) = vecnorm((obj.data.beta_fs - obj.beta_fs)') ./ vecnorm(obj.data.beta_fs');
+                else
+                    init_sample(idx, :) = abs(obj.data.beta_fs' - obj.beta_fs') ./ abs(obj.data.beta_fs');
+                end
+
+                for iter = 1:n_iter
+                    if obj.L < obj.system.K, obj.integrate; end             % ODE integration
+                    obj.estimate_covariances(iter);                         % residual covariance estimation
+                    obj.update_parameters();                                % gradient matching
+                    
+                    if obj.system.P > 1                                     % compute relative iteration steps
+                        obj.convergence_steps = vecnorm((obj.data.beta_fs - obj.beta_fs)') ./ vecnorm(obj.data.beta_fs');
+                    else
+                        obj.convergence_steps = abs(obj.data.beta_fs' - obj.beta_fs') ./ abs(obj.data.beta_fs');
+                    end
+                    
+                    beta_sample(idx, :, iter, :) = reshape(obj.beta_fs', 1, obj.system.P, obj.N);
+                   
+                    if max(obj.convergence_steps) < conv_thresh
+                        beta_sample(idx, :, iter+1:end, :) = repmat(beta_sample(idx, :, iter, :), 1, 1, n_iter-iter);
+                        disp('break')
+                        break
+                    end
+                end
+
+                steps_sample(idx, :) = obj.convergence_steps;
+            end
+            
+            converged_sample = steps_sample < conv_thresh;
+            diverged_sample = steps_sample > init_sample; 
+
+            for i = 1:obj.N, attraction_basins{i} = sample(converged_sample(:, i), :); end
+            for i = 1:obj.N, divergence{i} = sample(diverged_sample(:, i) & ~converged_sample(:, i), :); end
+            
+            
+            cells = [1 2 3 8 9];
+            
+            close all
+            figure(Position=[100 100 800 500])
+            tiledlayout(2, 3)
+            nexttile
+            scatter(obj.data.beta_fs(:, 1), obj.data.beta_fs(:, 2), 100, '.', MarkerEdgeColor="#AAAAAA")
+            hold on
+            plot(obj.data.beta_fs(cells, 1), obj.data.beta_fs(cells, 2), '.', MarkerEdgeColor="#D95319", MarkerSize=30)
+            xlabel('$\mathsf{k_p}$', 'interpreter', 'latex')
+            ylabel('$\mathsf{k_m}$', 'interpreter', 'latex')
+            ylim([.031 .11])
+            xlim([0.016 .074])
+            legend('\textsf{population}', '$\mathsf{\hat{\beta}_1, \ldots, \hat{\beta}_5}$', 'interpreter', 'latex')
+            
+            for i = 1:5
+                nexttile(i+1)
+                scatter(attraction_basins{cells(i)}(:, 1), attraction_basins{cells(i)}(:, 2), 100, ...
+                        'filled', MarkerFaceAlpha=.1, MarkerEdgeAlpha=.1, MarkerFaceColor="#0072BD")
+                hold on
+%                 scatter(divergence{i}(:, 1), divergence{i}(:, 2), 1000, ...
+%                         'filled', MarkerFaceAlpha=.1, MarkerEdgeAlpha=.1, MarkerFaceColor="#A2142F")
+%                 scatter(obj.data.beta_fs(:, 1), obj.data.beta_fs(:, 2), 300, '.', MarkerEdgeColor="#D95319")
+                plot(obj.data.beta_fs(cells(i), 1), obj.data.beta_fs(cells(i), 2), '.', MarkerEdgeColor="#D95319", MarkerSize=30)
+                plot(obj.data.beta_fs_history(1, 1, 1), obj.data.beta_fs(1, 2, 1), '^', ...
+                     MarkerEdgeColor="#EDB120", MarkerFaceColor="#EDB120", MarkerSize=10)
+                title(sprintf('Cell %d', i))
+                xlabel('$\mathsf{k_p}$', 'interpreter', 'latex')
+                ylabel('$\mathsf{k_m}$', 'interpreter', 'latex')
+                ylim([.031 .11])
+                xlim([0.016 .074])
+                
+                if i==1
+                    legend('\textsf{convergence}', '$\mathsf{\hat{\beta}_i}$', '$\mathsf{\hat{\beta}^0}$', 'interpreter', 'latex')
+                end
             end
             
 %             colors = .5 * ones(sample_size, 3, obj.N);
@@ -302,7 +524,7 @@ classdef ConvTest < handle
         
         
         function update_parameters(obj)                                 % Update (cell-specific) parameter estimates
-            for i = 1:obj.N                                                 % model slopes from splines and integrations
+            for i = 1:10                                                    % model slopes from splines and integrations
                 design = obj.system.g(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
                 const = obj.system.h(obj.smoothed_fitted(2:end-1, :, i), obj.data.t(2:end-1));
                 response = obj.dsmoothed_fitted(2:end-1, :, i) - const;     % spline and integration slopes
@@ -312,6 +534,11 @@ classdef ConvTest < handle
                 variances = obj.V(nonzero_ind, nonzero_ind, i);
                 weights = flatten(sqrt(obj.settings.weights(2:end-1, :)));
                 variances = variances ./ weights ./ weights';
+                
+                [~, flag] = chol(variances);
+                if flag
+                    variances = nearestSPD(variances);
+                end
                                                                             % constrained GLS using quadratic programming
                 obj.beta_fs(i, :) = Optimization.QPGLS(design, response, variances, obj.settings.lb, ...
                                                         obj.settings.ub, obj.settings.prior);
@@ -357,7 +584,7 @@ classdef ConvTest < handle
                                                                             % RHS Jacobian for each cell from smoothed measurements
             df_dX_all = obj.system.df(obj.data.smoothed, obj.data.t, obj.beta_fs);
             
-            for i = 1:obj.N                                                 % estimated measurement error variances
+            for i = 1:10                                                    % estimated measurement error variances
                 S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
                 var_delta = tryinv(Z' * (S \ Z));                           % spline coefficient uncertainty
                 var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
@@ -393,7 +620,7 @@ classdef ConvTest < handle
                 dh_all = obj.system.dh(obj.data.smoothed, obj.data.t);
             end
             
-            for i = 1:obj.N                                                 % estimated measurement error variances
+            for i = 1:10                                                    % estimated measurement error variances
                 S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-7));
                 var_delta = tryinv(Z' * (S \ Z));                           % spline coefficient uncertainty
                 var_smooth = [Z_fs; dZ_fs] * var_delta * [Z_fs' dZ_fs'];    % smoothed measurements covariance matrix
@@ -434,7 +661,7 @@ classdef ConvTest < handle
         
         function covariances_partial(obj, rep, converged)               % Parameter uncertainties and residual covariances
             if nargin < 3, converged = false; end                       % for partial observation
-            cells = 1:obj.N;
+            cells = 1:10;
 
             hidden = setdiff(1:obj.system.K, obj.data.observed);            % hidden/observed state/time indices
             ind_hid = flatten((1:obj.T)'+(obj.T*(hidden-1)));

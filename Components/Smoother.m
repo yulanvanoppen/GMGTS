@@ -50,7 +50,7 @@ classdef Smoother < handle
             
             obj.sigma2 = zeros(1, obj.L);                                   % initialize measurement error variances
             obj.tau2 = zeros(1, obj.L);
-            obj.variances_sm = zeros(obj.T, obj.L, obj.N);
+            obj.variances_sm = data.traces.^2 + .1*mean(data.traces).^2;    % initialize mostly multiplicative
             obj.variances_fs = zeros(length(settings.t_fs), obj.L, obj.N);
         end
 
@@ -122,7 +122,7 @@ classdef Smoother < handle
         function update_coefficients(obj, states)                       % Spline coefficients from current variances
             for i = 1:obj.N                                                 % W: correcting weights from variances
                 for k = states                                              % penalty: lambda * L2(spline basis/coefficients)
-                    W = diag(max(obj.variances_sm(:, k, i), 1e-7).^-1);     % delta_ik: LS estimate
+                    W = diag(max(obj.variances_sm(:, k, i), 1e-10).^-1);    % delta_ik: LS estimate
                     obj.delta{k}(:, i) = obj.B{k} * W * obj.B{k}' \ (obj.B{k} * W * obj.data.traces(:, k, i));
                 end
             end

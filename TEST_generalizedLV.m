@@ -17,7 +17,7 @@ noise_level = .05;
 seed = 1;
 
 generator = Generator(system ...                                            % generator setup
-                      , 'N', 10 ...                                         % number of cells
+                      , 'N', 50 ...                                         % number of cells
                       , 't', 0:20 ...                                       % time grid
                       , 'error_std', noise_level ...                        % std of lognormal multiplicative errors
                       , 'D_mult', .25 ...                                   % covariance matrix s.t. D = diag(D_mult*beta)^2

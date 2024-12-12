@@ -97,12 +97,12 @@ yticklabels([names2 ""])
 xlabel('Maturation time (min)')
 xlim([1 200])
 ylim([0 nfiles/2 + 1])
-% set(gca, 'XScale', 'log')
+set(gca, 'XScale', 'log')
 
 
 
 %%
-filestr = '/figures/maturation_times_sf.tex';
+filestr = 'figures/maturation_times_sf.tex';
 matlab2tikz(filestr)
 
 fid = fopen(filestr, 'r');
@@ -118,20 +118,29 @@ fclose(fid);
 
 
 %%
-% times_paolo = [.084 .034 .058 .015 .058 .058 .036 .05 .056 .1 .021 .016];
-% twostep_indices = [2 4 6 7 11 12];
-% times_paolo = log(2)./times_paolo;
-% times_paolo(twostep_indices) = times_paolo(twostep_indices) * 1.67835 / log(2);
-% times_paolo = round(times_paolo(order), 1);
-% 
-% modes_quartiles_times = zeros(nfiles, 5);
-% for index = 1:nfiles
-%     modes_quartiles_times(index, 1) = log(2)/means(index);
-%     modes_quartiles_times(index, 2:3) = log(2)./icdf('Gamma', [.75 .25], alphas_mode(index), betas_mode(index));
-%     modes_quartiles_times(index, 4) = diff(modes_quartiles_times(index, 2:3));
-%     modes_quartiles_times(index, 5) = .75 * modes_quartiles_times(index, 4) / modes_quartiles_times(index, 1);
-% end
-% modes_quartiles_times(:, 1:4) = round(modes_quartiles_times(:, 1:4), 1);
-% modes_quartiles_times(:, 5) = round(modes_quartiles_times(:, 5), 3)
-% dat = table(names2', times_paolo', modes_quartiles_times(:, [1:3 5]), ...
-%             'VariableNames', {'Protein', 'Paolo', 'GMGTS_q25_q75_IQR_RQR'})
+times_paolo = [.084 .034 .058 .015 .058 .058 .036 .05 .056 .1 .021 .016];
+twostep_indices = [2 4 6 7 11 12];
+times_paolo = log(2)./times_paolo;
+times_paolo(twostep_indices) = times_paolo(twostep_indices) * 1.67835 / log(2);
+times_paolo = round(times_paolo(order), 1);
+
+modes_quartiles_times = zeros(nfiles, 5);
+for index = 1:nfiles
+    factor = 1.67835 * twostep(nfiles-index+1) + log(2) * ~twostep(nfiles-index+1);
+    modes_quartiles_times(index, 1) = factor/means(nfiles-index+1);
+    modes_quartiles_times(index, 2:3) = factor./exp(icdf('Normal', [.75 .25], lmeans(nfiles-index+1), lsds(nfiles-index+1)));
+    modes_quartiles_times(index, 4) = diff(modes_quartiles_times(index, 2:3));
+    modes_quartiles_times(index, 5) = .75 * modes_quartiles_times(index, 4) / modes_quartiles_times(index, 1);
+end
+modes_quartiles_times(:, 1:4) = round(modes_quartiles_times(:, 1:4), 1);
+modes_quartiles_times(:, 5) = round(modes_quartiles_times(:, 5), 3)
+dat = table(flip(names2'), flip(times_paolo'), modes_quartiles_times(:, [1:3 5]), ...
+            'VariableNames', {'Protein', 'Paolo', 'GMGTS_q25_q75_IQR_RQR'})
+        
+protein = flip(names2');
+paolos = flip(times_paolo');
+modes = modes_quartiles_times(:, 1);
+q25 = modes_quartiles_times(:, 2);
+q75 = modes_quartiles_times(:, 3);
+times = modes_quartiles_times(:, 5);
+table2latex(protein, paolos, modes, q25, q75, times)

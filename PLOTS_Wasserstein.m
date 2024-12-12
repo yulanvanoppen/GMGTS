@@ -1,6 +1,6 @@
-set(groot, 'defaultAxesTickLabelInterpreter', 'latex');
-set(groot, 'defaultLegendInterpreter', 'latex');
-set(groot,'defaultTextInterpreter', 'latex');
+set(groot, 'defaultAxesTickLabelInterpreter', 'none');
+set(groot, 'defaultLegendInterpreter', 'none');
+set(groot,'defaultTextInterpreter', 'none');
 
 close all
 
@@ -33,13 +33,13 @@ S_s_5 = s_5^2*[s0(1)^2 r*prod(s0); r*prod(s0) s0(2)^2]
 
 r_1 = fzero(@(r) dist(m, s, r) - .1, 0.2)
 r_2 = fzero(@(r) dist(m, s, r) - .2, 0.2)
-smr_5 = fzero(@(s) dist((m_2(1)+m_5(1))/2/m0(1)-1, s, r_1) - .5, 2)
+smr_5 = fzero(@(s) dist((m_2(1)+2*m_5(1))/3/m0(1)-1, s, r_1) - .5, 2)
 
 S_r_1 = [s0(1)^2 r_1*prod(s0); r_1*prod(s0) s0(2)^2]
 S_r_2 = [s0(1)^2 r_2*prod(s0); r_2*prod(s0) s0(2)^2]
 S_smr_5 = smr_5^2*[s0(1)^2 r_2*prod(s0); r_2*prod(s0) s0(2)^2]
 
-m_all = [m_1; m_2; m_5; repmat(m0, 5, 1); (m_2+m_5)/2]'
+m_all = [m_1; m_2; m_5; repmat(m0, 5, 1); (m_2+2*m_5)/3]'
 S_all = [repmat(S0(:), 1, 3) S_s_1(:) S_s_2(:) S_s_5(:) S_r_1(:) S_r_2(:) S_smr_5(:)];
 
 
@@ -70,13 +70,28 @@ for tile = 1:9
     ylim([-1 5])
     
     switch tile
-        case 1, title('$\mathsf{W_2=0.1}$'), ylabel('\textsf{mean}')
-        case 2, title('$\mathsf{W_2=0.2}$')
-        case 3, title('$\mathsf{W_2=0.5}$')
-        case 4, ylabel('\textsf{variance}')
-        case 7, ylabel('\textsf{correlation}')
-        case 9, title('\textsf{(mixed factors)}')
+        case 1, title('$\mathsf{W_2=0.1}$', 'interpreter', 'latex'), ylabel('mean')
+        case 2, title('$\mathsf{W_2=0.2}$', 'interpreter', 'latex')
+        case 3, title('$\mathsf{W_2=0.5}$', 'interpreter', 'latex')
+        case 4, ylabel('variance')
+        case 7, ylabel('correlation')
+        case 9, xlabel('(mixed factors)')
     end
     
 end
+
+
+%%
+filestr = 'figures/wasserstein.tex';
+matlab2tikz(filestr)
+
+% fid = fopen(filestr, 'r');
+% f = fread(fid,'*char')';
+% % f = strrep(f, 'xminorticks=true,', ...
+% %            'xminorticks=true, minor xtick={1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200},');
+% % f = strrep(f, 'xmode=log,', 'xmode=log, xticklabels={{.5}, {1}, {2}, {5}, {10}, {20}, {50}, {100}, {200}},');
+% fclose(fid);
+% fid = fopen(filestr, 'w');
+% fwrite(fid, f);
+% fclose(fid);
 

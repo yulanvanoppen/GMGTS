@@ -105,18 +105,22 @@ mkdir('experimental')
 mkdir('experimental_fixed_km')
 
 system = System('model_maturation_twostep.txt', FixedParameters=["kr" "kdr" "kdil" "d"]);
+system_fixed = System('model_maturation_twostep.txt', FixedParameters=["kr" "kdr" "kdil" "d" "km"]);
 
 for idx = 1:length(data)
-% for idx = 8
+% for idx = 3
     
-    if idx == 7, system = System('model_maturation_onestep.txt', FixedParameters=["kr" "kdr" "kdil" "d"]); end
+    if idx == 7
+        system = System('model_maturation_onestep.txt', FixedParameters=["kr" "kdr" "kdil" "d"]);
+        system_fixed = System('model_maturation_onestep.txt', FixedParameters=["kr" "kdr" "kdil" "d" "km"]);
+    end
     disp(data(idx).name);
     
     system.fixed.values(3) = data(idx).kdil;
     data(idx).init = system.x0' + 1e-8;
     data(idx).observed = system.K;
     estimator = Estimator(system, data(idx), Methods=methods, Knots=knots, MaxIterationsFS=20, ...
-                          LB=[.001 .001], UB=[20 1], LogNormal=true, TestConvergence=true);
+                          LB=[.001 .001], UB=[20 1], LogNormal=true);
     
     rng(0);
     estimator.estimate();
@@ -129,23 +133,18 @@ for idx = 1:length(data)
     save(['experimental/'  data(idx).file(9:end-5) '.mat'])
     
 
-%     system = System(model, 'FixedParameters', ["kr" "kdr" "kdil" "d" "km"]);
-%     system.fixed.values(end) = estimator.results_GMGTS.b_est(end);
-%     estimator = Estimator(system, data(idx) ...                             % estimator setup
-%                           , 'Stages', 2 ...                                 % 0: smoothing only, 1: first stage only
-%                           , 'Methods', methods ...                          % GMGT, GTS, or both
-%                           , 'Knots', knots ...
-%                           , 'LB', .001 ...
-%                           , 'UB', 20 ...
-%                          );
-%     rng(0);
-%     estimator.estimate();
-% %     data(idx).logL_fixed_GMGTS = estimator.loglik(5);
-% %     data(idx).logL_fixed = estimator.loglik(5, "GTS");
-%     
-% %     plot(estimator, 'States', 2:system.K, 'MaxCells', 10)
-%     
-% %     save(['experimental_fixed_km/'  data(idx).file(9:end-5) '.mat'])
+    system_fixed.fixed.values(3) = data(idx).kdil;
+    system_fixed.fixed.values(end) = exp(estimator.results_GMGTS.b_est(end) + estimator.results_GMGTS.D_est(end)/2);
+    estimator = Estimator(system_fixed, data(idx), Methods=methods, Knots=knots, MaxIterationsFS=20, ...
+                          LB=.001, UB=20, LogNormal=true);
+    rng(0);
+    estimator.estimate();
+%     data(idx).logL_fixed_GMGTS = estimator.loglik(5);
+%     data(idx).logL_fixed = estimator.loglik(5, "GTS");
+    
+%     plot(estimator, 'States', 2:system.K, 'MaxCells', 10)
+    
+    save(['experimental_fixed_km/'  data(idx).file(9:end-5) '.mat'])
 end
 
 
