@@ -56,11 +56,11 @@ properties (Access = private)
         parameters                                                          % parameters
         parameters_variable                                                 % parameters excluding fixed
         x0                                                                  % model initial conditions
-        k0                                                                  % model initial parameters
     end
     
     properties (Access = public)
         fixed                                                               % fixed parameter names and values
+        k0                                                                  % model initial parameters
     end
     
     

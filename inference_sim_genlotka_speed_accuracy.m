@@ -1,66 +1,26 @@
 %% Setup system ------------------------------------------------------------
                           
 clearvars
-
-% name = 'generalizedLV';
-% model =  'model_generalizedLV1.txt';
-% system = System(name, model, 'FixedParameters', strcat('r', string(1:16)));
-% save('system_generalizedLV1.mat', 'system')
-% 
-% name = 'generalizedLV';
-% model =  'model_generalizedLV2.txt';
-% system = System(name, model, 'FixedParameters', strcat('r', string(1:16)));
-% save('system_generalizedLV2.mat', 'system')
-% 
-% name = 'generalizedLV';
-% model =  'model_generalizedLV4.txt';
-% system = System(name, model, 'FixedParameters', strcat('r', string(1:16)));
-% save('system_generalizedLV4.mat', 'system')
-% 
-% name = 'generalizedLV';
-% model =  'model_generalizedLV8.txt';
-% system = System(name, model, 'FixedParameters', strcat('r', string(1:16)));
-% save('system_generalizedLV8.mat', 'system')
-
-% load('system_generalizedLV1.mat')
-% load('system_generalizedLV2.mat')
-% load('system_generalizedLV4.mat')
-% load('system_generalizedLV8.mat')
+close all
 
 P_values = [1 2 4 8];
 seeds = 1:10;
 
-accuracies_GMGTS = zeros(length(seeds), length(P_values), 2);
-accuracies_GTS = zeros(length(seeds), length(P_values), 2);
-accuracies_truth = zeros(length(seeds), length(P_values), 2);
+[ws_GMGTS, ws_GTS, ws_truth, times_GMGTS, times_GTS] = deal(zeros(length(seeds), length(P_values), 2));
 
-times_GMGTS = zeros(length(seeds), length(P_values), 2);
-times_GTS= zeros(length(seeds), length(P_values), 2);
-
-for first_obs = 2
+for first_obs = [1 5]
     for P_idx = 1:length(P_values)
         for seed = seeds
-            P = P_values(P_idx)
-            seed
+            P = P_values(P_idx);
+            P_seed = [P seed]
             
-            load(sprintf('system_generalizedLV%d.mat', P));
+            system = System(sprintf('model_generalizedLV%d.txt', P), FixedParameters=strcat('r', string(1:16)));
 
-            if first_obs == 1, observed = 1:system.K; else, observed = 5:system.K; end
+            generator = Generator(system, N=100, t=0:20, error_std=.05, D_mult=.25, observed=first_obs:system.K);
 
-            generator = Generator(system ...                                            % generator setup
-                                  , 'N', 100 ...                                        % number of cells
-                                  , 't', [0:1:20] ...                                   % time grid
-                                  , 'error_std', .05 ...                                % std of lognormal multiplicative errors
-                                  , 'D_mult', .25 ...
-                                  , 'observed', observed ...                            % observed states labels (or indices)
-                                  , 'varying', 1:system.P ...                           % variable parameter labels (or indices)
-                                  );
-
-            rng(100*first_obs + 10*P_idx + seed - 110 - (min(seeds) > 0));              % fix random number generator
-            generator.generate();                                                       % generate data and package
-
-            generated = generator.data;
-            [data, ground_truth] = obfuscate(generated);
+            first_idx = min(first_obs, 2);
+            rng(100*first_idx + 10*P_idx + seed - 110 - (min(seeds) > 0));
+            [data, ground_truth] = generator.generate();
 
 
             %% Estimate ----------------------------------------------------------------
@@ -69,24 +29,22 @@ for first_obs = 2
             methods = [methods "GMGTS"];
             methods = [methods "GTS"];
 
-            estimator = Estimator(data, system ...                                      % estimator setup
-                                  , 'Stages', 2 ...                                     % 0: smoothing only, 1: first stage only
-                                  , 'Methods', methods ...                              % GMGT, GTS, or both
-                                  );
+            estimator = Estimator(system, data, Methods=methods, Knots=[5 10 15]);
+            [GMGTS, GTS] = estimator.estimate('silent');
 
-            estimator.estimate('silent');                                               % estimate parameters
+            GMGTS_wasserstein = wsdist(GMGTS.b, GMGTS.D, ground_truth.b, ground_truth.D);
+            GTS_wasserstein = wsdist(GTS.b, GTS.D, ground_truth.b, ground_truth.D);
+            truth_wasserstein = wsdist(mean(ground_truth.beta), cov(ground_truth.beta), ground_truth.b, ground_truth.D);
+            
+            ws_GMGTS(max(1, seed), P_idx, first_idx) = GMGTS_wasserstein;
+            ws_GTS(max(1, seed), P_idx, first_idx) = GTS_wasserstein;
+            ws_truth(max(1, seed), P_idx, first_idx) = truth_wasserstein;
 
-            GMGTS_distance = wsdist(estimator.results_GMGTS.b_est, estimator.results_GMGTS.D_GTS, mean(ground_truth.beta), cov(ground_truth.beta))
-            truth_distance = wsdist(mean(ground_truth.beta), cov(ground_truth.beta), ground_truth.b, ground_truth.D)
-
-            accuracies_GMGTS(max(1, seed), P_idx, first_obs) = GMGTS_distance;
-            accuracies_truth(max(1, seed), P_idx, first_obs) = truth_distance;
-
-            times_GMGTS(max(1, seed), P_idx, first_obs) = sum(estimator.results_GMGTS.time);
-
-            GTS_distance = wsdist(estimator.results_GTS.b_est, estimator.results_GTS.D_GTS, mean(ground_truth.beta), cov(ground_truth.beta))
-            accuracies_GTS(max(1, seed), P_idx, first_obs) = GTS_distance;
-            times_GTS(max(1, seed), P_idx, first_obs) = sum(estimator.results_GTS.time);
+            times_GMGTS(max(1, seed), P_idx, first_idx) = sum(estimator.results_GMGTS.time);
+            times_GTS(max(1, seed), P_idx, first_idx) = sum(estimator.results_GTS.time);
+            
+            ws_GMGTS_GTS = [GMGTS_wasserstein GTS_wasserstein]
+            times_GMGTS_GTS = [sum(estimator.results_GMGTS.time) sum(estimator.results_GTS.time)]
         end
     end
 end

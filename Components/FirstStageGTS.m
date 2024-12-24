@@ -1,8 +1,3 @@
-% START FROM TRUE CELL PARAMETERS
-% LOG-LIKELIHOOD VALUES
-%
-
-
 classdef FirstStageGTS < handle
     properties (SetAccess = private)
         data                                                                % data aggregate struct
@@ -53,7 +48,7 @@ classdef FirstStageGTS < handle
             for iter = 1:obj.settings.niter
                 beta_old = obj.beta_fs;
                 
-                obj.update_parameters(iter);                                % update (cell-specific) parameter estimates
+                obj.update_parameters();                                    % update (cell-specific) parameter estimates
                 obj.estimate_variances();                                   % update variance estimates
                 
                 if obj.system.P > 1                                         % compute relative iteration steps
@@ -82,16 +77,12 @@ classdef FirstStageGTS < handle
         end
         
         
-        function update_parameters(obj, iter)                           % Update (cell-specific) parameter estimates
+        function update_parameters(obj)                                 % Update (cell-specific) parameter estimates
             for i = 1:obj.N
                 SS = @(beta) obj.squares_sum(beta, obj.data.traces(obj.settings.optindices, :, i), ...
                                                    obj.variances_fs(obj.settings.optindices, :, i));
                                                
-%                 if iter == 1                                                % multistart every cell (for TCS)
-%                     obj.beta_fs(i, :) = Optimization.least_squares(SS, obj.settings.lb, obj.settings.ub, 5, []);
-%                 else
-                    obj.beta_fs(i, :) = Optimization.least_squares(SS, obj.settings.lb, obj.settings.ub, 1, obj.beta_fs(i, :));
-%                 end
+                obj.beta_fs(i, :) = Optimization.least_squares(SS, obj.settings.lb, obj.settings.ub, 1, obj.beta_fs(i, :));
             end
             obj.fitted_fs = obj.system.integrate(obj.beta_fs, obj.data);    % compute predicted trajectories
             if obj.settings.positive

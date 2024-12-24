@@ -19,13 +19,6 @@ kp = .025
 km = .05
 d = 4
 
-% kr = .1
-% kdr = .08
-% kdil = .006
-% kp = .05
-% km = .025
-% id = .25
-
 ********** MODEL VARIABLES
 
 

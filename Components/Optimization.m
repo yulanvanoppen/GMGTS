@@ -3,7 +3,8 @@ classdef Optimization < handle
     properties (Constant)
         options_mpcActiveSet = struct('DataType', 'double', 'MaxIterations', 200, 'ConstraintTolerance', 1e-6, ...
                                       'UseHessianAsInput', true, 'IntegrityChecks', false);
-        options_interiorpoint = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-8);
+        options_interiorpoint = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-8, ...
+                                             'FiniteDifferenceType', 'central');
         options_initialization = optimoptions('fmincon', 'Display', 'off', 'StepTolerance', 1e-4);
     end
     

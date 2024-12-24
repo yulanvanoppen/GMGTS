@@ -142,7 +142,6 @@ classdef Estimator < handle
         niterSS                                                             % #iterations for the second stage 
         tolSS                                                               % convergence tolerance for the second stage
         
-        testconv                                                            % pipeline to approximate FS basins of attraction
         lognormal                                                           % whether to infer lognormal RE distribution
         prior                                                               % parameter prior distribution
         
@@ -150,7 +149,6 @@ classdef Estimator < handle
         GMGTS_smoother                                                      % GMGTS smoothing object
         GMGTS_first_stage                                                   % GMGTS first stage optimization object
         GMGTS_second_stage                                                  % GMGTS second stage inference object
-        GMGTS_conv_test                                                     % GMGTS basin of attraction approximator
         results_GMGTS                                                       % collect GMGTS results
         
         GTS_settings                                                        % GTS settings struct
@@ -191,7 +189,6 @@ classdef Estimator < handle
             default_MaxIterationsSS = 10;
             default_ConvergenceTolSS = 1e-3;
             
-            default_TestConvergence = false;
             default_LogNormal = false;
             default_Prior = struct('mean', 0, 'prec', 0);
             
@@ -225,7 +222,6 @@ classdef Estimator < handle
             addParameter(parser, 'MaxIterationsSS', default_MaxIterationsSS, @isscalar);
             addParameter(parser, 'ConvergenceTolSS', default_ConvergenceTolSS, @isscalar);
             
-            addParameter(parser, 'TestConvergence', default_TestConvergence, @islogical);
             addParameter(parser, 'LogNormal', default_LogNormal, @islogical)
             addParameter(parser, 'Prior', default_Prior, @(x) isfield(x, 'mean') && numel(x.mean) == system.P ...
                                                            && (isfield(x, 'prec') && all(size(x.prec) == system.P) ...
@@ -313,7 +309,6 @@ classdef Estimator < handle
             obj.niterSS = max(1, round(parser.Results.MaxIterationsSS));
             obj.tolSS = max(1e-12, parser.Results.ConvergenceTolSS);
             
-            obj.testconv = parser.Results.TestConvergence;
             obj.lognormal = parser.Results.LogNormal;
             obj.prior = parser.Results.Prior;
             obj.prior.mean = flatten(obj.prior.mean);
@@ -431,11 +426,6 @@ classdef Estimator < handle
             
             obj.results_GMGTS.time = [toc_sm_GMGTS toc_fs_GMGTS toc_ss_GMGTS];
             
-            if obj.testconv
-                obj.GMGTS_conv_test = ConvTest(obj.results_GMGTS, obj.system, obj.GMGTS_settings.fs);
-                obj.results_GMGTS = obj.GMGTS_conv_test.estimate();
-            end
-            
             warning(ws);
         end
         
@@ -471,11 +461,11 @@ classdef Estimator < handle
             if selected_method == "GMGTS"
                 b = obj.results_GMGTS.b_est;
                 D = obj.results_GMGTS.D_est;
-                var = @(trace) obj.GMGTS_smoother.theta_fs(1) + obj.GMGTS_smoother.theta_fs(2) * trace.^2;
+                var = @(trace) obj.GMGTS_smoother.sigma2 + obj.GMGTS_smoother.tau2 * trace.^2;
             else
                 b = obj.results_GTS.b_est;
                 D = obj.results_GTS.D_est;
-                var = @(trace) obj.GTS_first_stage.theta_fs(1) + obj.GTS_first_stage.theta_fs(2) * trace.^2;
+                var = @(trace) obj.GTS_first_stage.sigma2 + obj.GTS_first_stage.tau2 * trace.^2;
             end
             
             logfs = @(trace, i) flatten(sum(-1/2 * (obj.data.traces(:, :, i) - trace).^2 ./ var(trace) - 1/2 * log(var(trace)), [1 2]));
@@ -506,6 +496,65 @@ classdef Estimator < handle
                     terms = logfs(sample_traces(:, obj.data.observed, :), i) + logps - logqs;
                     reg = -max(terms);
                     Lis(i) = log(sum(exp(terms + reg), 'all')/M) - reg;
+                end
+%                 fprintf('\n %4f\n', sum(Lis));
+                L(rep) = sum(Lis);
+            end
+            fprintf('\n Mean: %.2f SD: %.2f\n', mean(L), std(L));
+        end
+        
+        
+        
+        function L = loglik_lognormal(obj, nrep, ~)
+            if nargin < 3, selected_method = "GMGTS"; else, selected_method = "GTS"; end
+            if ~isfield(obj.results_GMGTS, 'b_est'), L = -Inf; return, end
+            
+            L = zeros(1, nrep);
+            if selected_method == "GMGTS"
+                b = obj.results_GMGTS.b_est;
+                D = obj.results_GMGTS.D_est;
+                var = @(trace) obj.GMGTS_smoother.sigma2 + obj.GMGTS_smoother.tau2 * trace.^2;
+            else
+                b = obj.results_GTS.b_est;
+                D = obj.results_GTS.D_est;
+                var = @(trace) obj.GTS_first_stage.sigma2 + obj.GTS_first_stage.tau2 * trace.^2;
+            end
+            
+            logfs = @(trace, i) flatten(sum(-1/2 * (obj.data.traces(:, :, i) - trace).^2 ./ var(trace) - 1/2 * log(var(trace)), [1 2]));
+            
+            for rep = 1:nrep
+                fprintf('%d ', rep);
+                M = 1000;
+                Lis = zeros(1, obj.data.N);
+
+                for i = 1:obj.data.N
+%                     fprintf('%d ', i);
+                    beta_i = obj.results_GMGTS.beta_fs(i, :, :);
+
+                    sample_parameters = mvnrnd(log(beta_i), D/9, M);
+                    sample_traces = obj.system.integrate(exp(sample_parameters), obj.data, obj.data.t, 1e-2);
+                    logps = log(mvnpdf(sample_parameters, b, D));
+                    
+                    div = 1;
+                    while isinf(quantile(logps, .9))
+                        div = div + 1;
+                        sample_parameters = mvnrnd((log(beta_i)+(div-1)*b)/div, div*D/9, M);
+                        sample_traces = obj.system.integrate(exp(sample_parameters), obj.data, obj.data.t, 1e-2);
+                        logps = log(mvnpdf(sample_parameters, b, D));
+                    end
+                    
+                    logqs = log(mvnpdf(sample_parameters, (log(beta_i)+(div-1)*b)/div, div*D/9));
+
+                    finite = ~(isinf(logps) | isinf(logqs));
+                    logfs_i = logfs(sample_traces(:, obj.data.observed, :), i);
+                    terms = logfs_i(finite) + logps(finite) - logqs(finite);
+                    reg = -max(terms);
+                    Lis(i) = log(sum(exp(terms + reg), 'all')/M) - reg;
+                    
+                    
+                    if isnan(Lis(i))
+                        disp(1)
+                    end
                 end
 %                 fprintf('\n %4f\n', sum(Lis));
                 L(rep) = sum(Lis);

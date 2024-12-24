@@ -3,8 +3,8 @@
 clearvars
 close all
 
-% system = System('model_maturation_onestep.txt', FixedParameters=["kr" "kdr" "kdil" "d"]);
-% save('system_maturation_delay.mat', 'system')
+system = System('model_maturation_onestep.txt', FixedParameters=["kr" "kdr" "kdil" "d"]);
+save('system_maturation_delay.mat', 'system')
 load('system_maturation_delay.mat')
 
 dt_values = [5 10 20 40];
@@ -18,7 +18,7 @@ seeds = 1:10;
 [ws_GMGTS, ws_GTS, ws_truth, wsu_GMGTS, wsu_GTS, wsu_truth, ...
  he_GMGTS, he_GTS, he_truth, times_GMGTS, times_GTS] = deal(zeros(length(seeds), length(noise_levels), length(dt_values), 2));
 
-% % % % % % load('simulation/maturation_accuracy.mat')
+% load('simulation/maturation_accuracy2.mat')
 
 for first_obs = [1 2]
     for dt_idx = 1:length(dt_values) 
@@ -35,8 +35,6 @@ for first_obs = [1 2]
                 
                 [data, ground_truth] = generator.generate();
                 
-                
-                %% Estimate ----------------------------------------------------------------
 
                 methods = [];
                 methods = [methods "GMGTS"];
@@ -73,13 +71,13 @@ for first_obs = [1 2]
                 times_GTS(max(1, seed), noise_idx, dt_idx, first_obs) = times_GMGTS_GTS(2);
             end
         end
-        save('simulation/maturation_accuracy.mat');
+        save('simulation/maturation_accuracy2.mat');
     end
 end
 
 
 mkdir('simulation')
-wsfile = 'simulation/maturation_accuracy.mat';
+wsfile = 'simulation/maturation_accuracy2.mat';
 save(wsfile);
 
 

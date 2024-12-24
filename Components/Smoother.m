@@ -187,7 +187,7 @@ classdef Smoother < handle
             y1 = obj.data.traces(1:end-2, :, :);
             y2 = obj.data.traces(2:end-1, :, :);
             y3 = obj.data.traces(3:end, :, :);
-            dy = (y3 - y2) ./ (d32 + d21);
+            dy = (y3 - y1) ./ (d32 + d21);
             ddy = 2 * (y1./d21./d31 - y2./d32./d21 + y3./d32./d31);
 
             zscore_dy = mean(dy, 3) ./ std(dy, 0, 3);                       % normalized mean slopes and curvature estimates
