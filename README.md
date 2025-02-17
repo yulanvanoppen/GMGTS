@@ -6,7 +6,9 @@ _MATLAB®  code package for (ODE-based) nonlinear mixed-effects (NLME) model inf
 ## Quickstart
 Install MATLAB® R2021a with IQM Tools Pro Version 1.2.2 (02.01.2017) and Monolix 2021R2.
 
-Run `example.m` to generate data from an example ODE-based ME model and recover the random effects distribution using GMGTS.
+Run `example_inference.m` to generate data from an example ODE-based ME model and recover the random effects distribution using GMGTS.
+
+To try just the interactive smoothing app, run `example_smoothing.m` (_IQM Tools and Monolix installations not required_).
 
 Run the `inference_*.m` files to reproduce the results in [1].
 
