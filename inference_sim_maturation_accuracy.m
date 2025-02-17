@@ -11,14 +11,8 @@ dt_values = [5 10 20 40];
 noise_levels = [.001 .005 .01 .02 .05 .1];
 seeds = 1:10;
 
-% dt_values = [5 10];
-% noise_levels = [.001 .005];
-% seeds = 1:2;
-
 [ws_GMGTS, ws_GTS, ws_truth, wsu_GMGTS, wsu_GTS, wsu_truth, ...
  he_GMGTS, he_GTS, he_truth, times_GMGTS, times_GTS] = deal(zeros(length(seeds), length(noise_levels), length(dt_values), 2));
-
-% load('simulation/maturation_accuracy2.mat')
 
 for first_obs = [1 2]
     for dt_idx = 1:length(dt_values) 

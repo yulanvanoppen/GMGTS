@@ -3,25 +3,19 @@
 clearvars
 close all
 
-% system = System('model_bifunctional2.txt', FixedParameters=["k1" "k2" "k4" "k6"]);
-% save('system_bifunctional_measurable.mat', 'system')
-% load('system_bifunctional_measurable.mat')
-% 
-% dt_values = [2.5 5 10 20];
-% noise_levels = [.001 .005 .01 .02 .05 .1];
-% seeds = 1:10;
-% 
-% % dt_values = [5 10];
-% % noise_levels = [.02 .05];
-% % seeds = 1:2;
-% 
-% [ws_GMGTS, ws_GTS, ws_truth, wsu_GMGTS, wsu_GTS, wsu_truth, ...
-%  he_GMGTS, he_GTS, he_truth, times_GMGTS, times_GTS] = deal(zeros(length(seeds), length(noise_levels), length(dt_values), 2));
+system = System('model_bifunctional.txt', FixedParameters=["k1" "k2" "k4" "k6"]);
+save('system_bifunctional_measurable.mat', 'system')
+load('system_bifunctional_measurable.mat')
 
-load('simulation/bifunctional_accuracy.mat')
+dt_values = [2.5 5 10 20];
+noise_levels = [.001 .005 .01 .02 .05 .1];
+seeds = 1:10;
+
+[ws_GMGTS, ws_GTS, ws_truth, wsu_GMGTS, wsu_GTS, wsu_truth, ...
+ he_GMGTS, he_GTS, he_truth, times_GMGTS, times_GTS] = deal(zeros(length(seeds), length(noise_levels), length(dt_values), 2));
  
-for first_obs = 3
-    for dt_idx = 3:length(dt_values)
+for first_obs = [1 3]
+    for dt_idx = 1:length(dt_values)
         for noise_idx = 1:length(noise_levels)
             for seed = seeds
                 dt = dt_values(dt_idx);
