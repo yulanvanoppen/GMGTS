@@ -38,7 +38,8 @@ function [out, estimator] = GMGTS(model_file, data, varargin)
 %   the ODE system from the initial values given in init to make state
 %   predictions. If data is a struct, init is ignored and assumed to be a
 %   field of data. If omitted, the initial values are all assumed to equal
-%   1e-8.
+%   1e-4 (or, if data is a struct without an init field, the initial
+%   conditions specified in model_file plus 1e-4).
 %
 %   out = GMGTS(model_file, data, t, observed, init, Plot=false, ...)
 %   disables plots with parameter estimates, the inferred random effects 
@@ -50,13 +51,18 @@ function [out, estimator] = GMGTS(model_file, data, varargin)
 %
 %   See also SYSTEM, ESTIMATOR.
 
+    is_name = @(x) ischar(x) || (isstring(x) && isscalar(x));               % separate optional positional arguments
+    first_name = find(cellfun(is_name, varargin), 1);                       % (t, observed, init) from Name-Value pairs
+    if isempty(first_name), first_name = numel(varargin) + 1; end
+    namevalue = varargin(first_name:end);
+
     default_Plot = true;                                                    % add argument whether or not to plot
     parser = inputParser;
     parser.KeepUnmatched = true;
     addParameter(parser, 'Plot', default_Plot, @islogical);
-    parser.parse(varargin{:})
+    parser.parse(namevalue{:})
 
-    system = ODEIQM(model_file, varargin{:});                               % create (ODE) System object
+    system = System(model_file, namevalue{:});                              % create (ODE) System object
     estimator = Estimator(system, data, varargin{:});                       % create Estimator object from system and data
     
     outputs = cell(1, length(estimator.method));
@@ -68,6 +74,6 @@ function [out, estimator] = GMGTS(model_file, data, varargin)
         out = [outputs{1} outputs{2}];
     end
     
-    if parser.Results.Plot, plot(estimator, varargin{:}), end               % plot if required
+    if parser.Results.Plot, plot(estimator, namevalue{:}), end              % plot if required
 end
 

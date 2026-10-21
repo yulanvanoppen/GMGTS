@@ -21,7 +21,9 @@ classdef Estimator < handle
 %   omitted and all subsequent arguments. The defaults are:
 %       t = 0:size(data, 1)-1
 %       observed = 1:size(data, 2)
-%       init = 1e-8*ones(1, system.K)
+%       init = 1e-4*ones(1, system.K)
+%   (if data is a struct without an 'init' field, the initial conditions
+%   specified by system plus 1e-4 are used instead)
 %
 %   OBJECT METHODS
 %       varargout = estimator.estimate() carries out estimation for the
@@ -43,12 +45,12 @@ classdef Estimator < handle
 %
 %       plot(estimator, Parameters=parameters, ...) restricts the plots to
 %       the specified parameters, which may consist of indices or labels.
-
+%
 %       plot(estimator, MaxCells=N, ...) only plots data and predictions for
 %       the first N cells.
 % 
 %   CONSTRUCTOR NAME-VALUE ARGUMENTS
-%     Stages - GMGTS and GTS stages to execure
+%     Stages - GMGTS and GTS stages to execute
 %       2 (default) | 0 | 1
 %       (GMGTS either executes smoothing only (0), smoothing
 %       and first-stage estimates (1), or everything including the
@@ -67,7 +69,7 @@ classdef Estimator < handle
 %       states, or a cell array of state-specific knot location vectors)
 %
 %     InteractiveSmoothing - Use the interactive app to smooth measurements
-%       true (default) | false
+%       false (default) | true
 %
 %     LB - Parameter space lower bounds 
 %       numeric vector
@@ -77,7 +79,7 @@ classdef Estimator < handle
 %       numeric vector
 %       (4 times the nominal parameter value specified by system by default)
 %
-%     PositiveState - Force smoothed/predicted state positivity
+%     PositiveStates - Force smoothed/predicted state positivity
 %       true (default) | false
 %
 %     TimePoints - Time point grid for first-stage optimization
@@ -125,7 +127,7 @@ classdef Estimator < handle
         
         stages                                                              % stages to execute
         method                                                              % method(s) to conduct inference
-        autoknots                                                           % logical for placement heuristoic
+        autoknots                                                           % logical for placement heuristic
         knots                                                               % B-spline knots for each state
         interactive                                                         % logical for interactive smoothing app use
         
@@ -165,7 +167,7 @@ classdef Estimator < handle
             
             default_t = 0:size(data, 1)-1;
             default_observed = 1:size(data, 2);
-            default_init = 1e-8 * ones(1, system.K);
+            default_init = 1e-4 * ones(1, system.K);
             
             default_Stages = 2;
             default_Methods = "GMGTS";
@@ -209,8 +211,8 @@ classdef Estimator < handle
                                                            || isnumeric(x));
             addParameter(parser, 'InteractiveSmoothing', default_InteractiveSmoothing, @islogical);
 
-            addParameter(parser, 'LB', default_LB, @(x) all(x < initial));
-            addParameter(parser, 'UB', default_UB, @(x) all(x > initial));
+            addParameter(parser, 'LB', default_LB, @(x) numel(x) == system.P && all(x(:)' < initial));
+            addParameter(parser, 'UB', default_UB, @(x) numel(x) == system.P && all(x(:)' > initial));
             addParameter(parser, 'PositiveStates', default_PositiveStates, @islogical);
             addParameter(parser, 'TimePoints', default_TimePoints, @(x) all(data.t(1) <= x & x <= data.t(end)));
             
@@ -256,24 +258,17 @@ classdef Estimator < handle
                 if ~isfield(data, 'init'), data.init = system.x0' + 1e-4; end
             else                                                            % components provided separately
                 traces = data;                                              % array with measurements instead of struct
-                if ~iscellstr(varargin(1)) && ~isstring(varargin{1})        % recursively check if optional or Name/Value
-                    t = sort(unique(reshape(varargin{1}, 1, [])));
-                    if ~iscellstr(varargin(2)) && ~isstring(varargin{2})
-                        observed = sort(unique(reshape(varargin{2}, 1, [])));
-                        if ~iscellstr(varargin(3)) && ~isstring(varargin{3})
-                            init = reshape(varargin{3}, 1, []);
-                        else                                                % substitute defaults instead
-                            init = 1e-4 * ones(1, system.K);
-                        end
-                    else
-                        observed = 1:size(traces, 2);
-                        init = 1e-4 * ones(1, system.K);
-                    end
-                else
-                    t = 0:size(traces, 1)-1;
-                    observed = 1:size(traces, 2);
-                    init = 1e-4 * ones(1, system.K);
-                end                                                         % compile into struct
+                is_name = @(x) ischar(x) || isstring(x);                    % number of positional arguments preceding
+                n_positional = find(cellfun(is_name, varargin), 1) - 1;     % the Name/Value pairs (at most t, observed, init)
+                if isempty(n_positional), n_positional = numel(varargin); end
+
+                t = 0:size(traces, 1)-1;                                    % defaults for omitted arguments
+                observed = 1:size(traces, 2);
+                init = 1e-4 * ones(1, system.K);
+                if n_positional >= 1, t = sort(unique(reshape(varargin{1}, 1, []))); end
+                if n_positional >= 2, observed = sort(unique(reshape(varargin{2}, 1, []))); end
+                if n_positional >= 3, init = reshape(varargin{3}, 1, []); end
+                                                                            % compile into struct
                 data = struct('traces', traces, 't', t, 'observed', observed, 'init', init);
             end
             [data.T, data.L, data.N] = size(data.traces);                   % include dimensions for notational convenience
@@ -297,8 +292,8 @@ classdef Estimator < handle
             obj.autoknots = parser.Results.AutoKnots && ismember("Knots", string(parser.UsingDefaults));
             obj.interactive = parser.Results.InteractiveSmoothing;
             
-            obj.lb = parser.Results.LB;
-            obj.ub = parser.Results.UB;
+            obj.lb = reshape(parser.Results.LB, 1, []);                     % bounds as row vectors
+            obj.ub = reshape(parser.Results.UB, 1, []);
             obj.positive = parser.Results.PositiveStates;
             obj.t_fs = sort(unique(parser.Results.TimePoints));
             obj.niterSM = max(1, round(parser.Results.MaxIterationsSM));
@@ -319,9 +314,9 @@ classdef Estimator < handle
             end
             if isfield(obj.prior, 'sd')
                 obj.prior.sd = flatten(obj.prior.sd);
-                warning('off','MATLAB:singularMatrix')
+                ws = warning('off', 'MATLAB:singularMatrix');
                 obj.prior.prec = inv(diag(obj.prior.sd.^2));
-                warning('on','MATLAB:singularMatrix')
+                warning(ws)
             end
             if ~isfield(obj.prior, 'mult'), obj.prior.mult = 1; end
         end
@@ -357,6 +352,8 @@ classdef Estimator < handle
         %% Estimation ------------------------------------------------------
         function varargout = estimate(obj, silent)
             if nargin < 2, silent = false; end
+            if ischar(silent) || isstring(silent), silent = true; end       % also accept estimate('silent')
+            silent = logical(silent);
             varargout = cell(1, 0);
             idx = 1;
             
@@ -367,7 +364,7 @@ classdef Estimator < handle
                              'dsmoothed', obj.results_GMGTS.dsmoothed_fine);
                 if obj.stages >= 1
                     out.fitted = obj.results_GMGTS.fitted_fs_fine;
-                    out.dfitted = obj.results_GMGTS.fitted_fs_fine;
+                    out.dfitted = obj.results_GMGTS.dfitted_fs_fine;
                     out.beta = obj.results_GMGTS.beta_fs;
                     out.uncertainties = obj.results_GMGTS.varbeta;
                 end
@@ -421,7 +418,7 @@ classdef Estimator < handle
             end
             
             if ~silent
-                fprintf('total time (GMGTS): %d seconds\n', toc_sm_GMGTS + toc_fs_GMGTS + toc_ss_GMGTS)
+                fprintf('total time (GMGTS): %.2f seconds\n', toc_sm_GMGTS + toc_fs_GMGTS + toc_ss_GMGTS)
             end
             
             obj.results_GMGTS.time = [toc_sm_GMGTS toc_fs_GMGTS toc_ss_GMGTS];
@@ -446,27 +443,28 @@ classdef Estimator < handle
             end
             
             if ~silent
-                fprintf('total time (GTS): %d seconds\n', toc_fs_GTS + toc_ss_GTS)
+                fprintf('total time (GTS): %.2f seconds\n', toc_fs_GTS + toc_ss_GTS)
             end
             
             obj.results_GTS.time = [toc_fs_GTS toc_ss_GTS];
         end
         
         
-        function L = loglik(obj, nrep, ~)
-            if nargin < 3, selected_method = "GMGTS"; else, selected_method = "GTS"; end
-            if ~isfield(obj.results_GMGTS, 'b_est'), L = -Inf; return, end
+        function L = loglik(obj, nrep, selected_method)               % Importance sampling log-likelihood estimate
+            if nargin < 3, selected_method = "GMGTS"; end                   % (nrep replicates) for "GMGTS" or "GTS" results
+            if upper(string(selected_method)) == "GMGTS"
+                results = obj.results_GMGTS;
+                noise_model = obj.GMGTS_smoother;
+            else
+                results = obj.results_GTS;
+                noise_model = obj.GTS_first_stage;
+            end
+            if ~isfield(results, 'b_est'), L = -Inf; return, end
             
             L = zeros(1, nrep);
-            if selected_method == "GMGTS"
-                b = obj.results_GMGTS.b_est;
-                D = obj.results_GMGTS.D_est;
-                var = @(trace) obj.GMGTS_smoother.sigma2 + obj.GMGTS_smoother.tau2 * trace.^2;
-            else
-                b = obj.results_GTS.b_est;
-                D = obj.results_GTS.D_est;
-                var = @(trace) obj.GTS_first_stage.sigma2 + obj.GTS_first_stage.tau2 * trace.^2;
-            end
+            b = results.b_est;
+            D = results.D_est;
+            var = @(trace) noise_model.sigma2 + noise_model.tau2 .* trace.^2;
             
             logfs = @(trace, i) flatten(sum(-1/2 * (obj.data.traces(:, :, i) - trace).^2 ./ var(trace) - 1/2 * log(var(trace)), [1 2]));
             
@@ -477,7 +475,7 @@ classdef Estimator < handle
 
                 for i = 1:obj.data.N
 %                     fprintf('%d ', i);
-                    beta_i = obj.results_GMGTS.beta_fs(i, :, :);
+                    beta_i = results.beta_fs(i, :);
 
                     sample_parameters = mvnrnd(beta_i, D/9, M);
                     sample_traces = obj.system.integrate(sample_parameters, obj.data, obj.data.t, 1e-2);
@@ -505,20 +503,21 @@ classdef Estimator < handle
         
         
         
-        function L = loglik_lognormal(obj, nrep, ~)
-            if nargin < 3, selected_method = "GMGTS"; else, selected_method = "GTS"; end
-            if ~isfield(obj.results_GMGTS, 'b_est'), L = -Inf; return, end
+        function L = loglik_lognormal(obj, nrep, selected_method)               % Importance sampling log-likelihood estimate
+            if nargin < 3, selected_method = "GMGTS"; end                   % (nrep replicates) for "GMGTS" or "GTS" results
+            if upper(string(selected_method)) == "GMGTS"
+                results = obj.results_GMGTS;
+                noise_model = obj.GMGTS_smoother;
+            else
+                results = obj.results_GTS;
+                noise_model = obj.GTS_first_stage;
+            end
+            if ~isfield(results, 'b_est'), L = -Inf; return, end
             
             L = zeros(1, nrep);
-            if selected_method == "GMGTS"
-                b = obj.results_GMGTS.b_est;
-                D = obj.results_GMGTS.D_est;
-                var = @(trace) obj.GMGTS_smoother.sigma2 + obj.GMGTS_smoother.tau2 * trace.^2;
-            else
-                b = obj.results_GTS.b_est;
-                D = obj.results_GTS.D_est;
-                var = @(trace) obj.GTS_first_stage.sigma2 + obj.GTS_first_stage.tau2 * trace.^2;
-            end
+            b = results.b_est;
+            D = results.D_est;
+            var = @(trace) noise_model.sigma2 + noise_model.tau2 .* trace.^2;
             
             logfs = @(trace, i) flatten(sum(-1/2 * (obj.data.traces(:, :, i) - trace).^2 ./ var(trace) - 1/2 * log(var(trace)), [1 2]));
             
@@ -529,7 +528,7 @@ classdef Estimator < handle
 
                 for i = 1:obj.data.N
 %                     fprintf('%d ', i);
-                    beta_i = obj.results_GMGTS.beta_fs(i, :, :);
+                    beta_i = results.beta_fs(i, :);
 
                     sample_parameters = mvnrnd(log(beta_i), D/9, M);
                     sample_traces = obj.system.integrate(exp(sample_parameters), obj.data, obj.data.t, 1e-2);
@@ -550,11 +549,6 @@ classdef Estimator < handle
                     terms = logfs_i(finite) + logps(finite) - logqs(finite);
                     reg = -max(terms);
                     Lis(i) = log(sum(exp(terms + reg), 'all')/M) - reg;
-                    
-                    
-                    if isnan(Lis(i))
-                        disp(1)
-                    end
                 end
 %                 fprintf('\n %4f\n', sum(Lis));
                 L(rep) = sum(Lis);
@@ -638,7 +632,7 @@ classdef Estimator < handle
                           obj.data.T, n_cells), '-');
 %                 h2 = plot(obj.data.t, reshape(obj.results_GMGTS.smoothed(:, ind(k), 1:n_cells), ...
 %                           obj.data.T, n_cells), '--');
-                h2 = plot(linspace(obj.data.t(1), obj.data.t(end), 81), ...
+                h2 = plot(obj.results_GMGTS.t_fine, ...
                           reshape(obj.results_GMGTS.smoothed_fine(:, ind(k), 1:n_cells), ...
                           [], n_cells), '--');
                 if k == 1, legend([h1(1) h2(1)], 'data', 'smoothing'), end
@@ -655,7 +649,7 @@ classdef Estimator < handle
                 ylabel('gradient')
 %                 h4 = plot(obj.data.t, reshape(obj.results_GMGTS.dsmoothed(:, ind(k), 1:n_cells), ...
 %                           obj.data.T, n_cells), '--');
-                h4 = plot(linspace(obj.data.t(1), obj.data.t(end), 81), ...
+                h4 = plot(obj.results_GMGTS.t_fine, ...
                           reshape(obj.results_GMGTS.dsmoothed_fine(:, ind(k), 1:n_cells), ...
                           [], n_cells), '--');
                 if k == 1, legend(h4(1), 'smoothing'), end
@@ -705,10 +699,10 @@ classdef Estimator < handle
 
                 if any(obj.method == "GMGTS")
                     nexttile(length(states) + k)
-                    title(['$d$ \hspace*{-.3em}' obj.system.states{k} '\hspace*{-.3em} $/dt$'])
+                    title(['$d$ \hspace*{-.3em}' obj.system.states{states(k)} '\hspace*{-.3em} $/dt$'])
                     hold on
                     if ismember(states(k), obj.data.observed)
-                        h = plot(linspace(obj.data.t(1), obj.data.t(end), 81), ...
+                        h = plot(obj.results_GMGTS.t_fine, ...
                                  reshape(obj.results_GMGTS.dsmoothed_fine(:, obs_ind, 1:n_cells), ...
                                          [], n_cells), '--');
                         set(h, {'color'}, col_scheme);
@@ -998,9 +992,6 @@ classdef Estimator < handle
             quantiles = sqrt(chi2inv(levels, 2) / S_inv(1, 1));
             levels = mvnpdf(m+[quantiles' zeros(length(levels), 1)], m, S);
 %             if max(levels) > 1e8, levels = min(levels, 1e16) / max(levels) * 1e8; end
-            if any(~isfinite(levels))
-                disp(1)
-            end
             if manual
                 [~, h2] = contour(kron(x', ones(1, length(y))), kron(y, ones(length(x), 1)), p, marker);
 %                 [~, h2] = contour(kron(x', ones(1, length(y))), kron(y, ones(length(x), 1)), p, marker, varargin{:});
@@ -1036,17 +1027,14 @@ classdef Estimator < handle
             p = zeros(length(x), length(y));
             for i = 1:length(x)
                 for j = 1:length(y)
-                    p(i, j) = Estimator.mvlnpdf([x(i) y(j)], m, S);
+                    p(i, j) = mvnpdf(log([x(i) y(j)]), m, S);              % Gaussian density in log space, so that contours
+                                                                            % are the images of the normal-case ellipses
                 end
             end
 
             S_inv = pinv(S);
             quantiles = sqrt(chi2inv(levels, 2) / S_inv(1, 1));
-            levels_transf = Estimator.mvlnpdf(exp(m+[quantiles' zeros(length(levels), 1)]), m, S);
-%             if max(levels) > 1e8, levels = min(levels, 1e16) / max(levels) * 1e8; end
-            if any(~isreal(p), 'all')
-                disp(1)
-            end
+            levels_transf = mvnpdf(m+[quantiles' zeros(length(levels), 1)], m, S);
             if manual
                 [~, h2] = contour(kron(x', ones(1, length(y))), kron(y, ones(length(x), 1)), p, marker);
 %                 [~, h2] = contour(kron(x', ones(1, length(y))), kron(y, ones(length(x), 1)), p, marker, varargin{:});
@@ -1065,7 +1053,7 @@ classdef Estimator < handle
             [n, d] = size(x);
             p = zeros(size(x, 1), 1);
             for i = 1:n
-                p(i) = (2*pi)^(-d/2) * det(S)^-1 * prod(x(i, :)) ...
+                p(i) = (2*pi)^(-d/2) * det(S)^(-1/2) / prod(x(i, :)) ...
                                      * exp(-.5 * (log(x(i, :))-m) * tryinv(S) * (log(x(i, :))-m)');
             end
         end

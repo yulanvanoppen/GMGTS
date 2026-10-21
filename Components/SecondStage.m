@@ -70,7 +70,7 @@ classdef SecondStage < handle
 
         
         function M_step(obj, iter, Dinv_iter)                           % Maximization step of EM algorithm
-            warning('off','MATLAB:singularMatrix')
+            ws = warning('off', 'MATLAB:singularMatrix');
             
             obj.b(iter+1, :) = mean(obj.beta(obj.cells, :, iter+1));        % update parameter mean
             b_iter = obj.b(iter+1, :)';
@@ -88,7 +88,7 @@ classdef SecondStage < handle
             end
             
             obj.D(:, :, iter+1) = mean(summands(:, :, obj.cells), 3);        % update D
-            warning('on')
+            warning(ws)                                                     % restore previous warning state
         end
 
         

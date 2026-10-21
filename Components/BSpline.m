@@ -19,7 +19,7 @@ classdef BSpline < handle
         end
         
                                             
-        function y = spline(obj, x, beta)                               % Evaulate a spline with basis coefficients beta at x
+        function y = spline(obj, x, beta)                               % Evaluate a spline with basis coefficients beta at x
             J = size(beta, 1);                                              % extract the basis cardinality and reshape beta
             beta_reshaped = reshape(beta, J, 1, []);
 
@@ -28,7 +28,7 @@ classdef BSpline < handle
             y = permute(y, [3 2 1]);                                        % convert back to matrix
         end
         
-                                                                        % Evaulate the derivative of BSpline.spline()
+                                                                        % Evaluate the derivative of BSpline.spline()
         function y = spline_diff(obj, x, beta)
             J = size(beta, 1);                                              % extract the basis cardinality and reshape beta
             beta_reshaped = reshape(beta, J, 1, []);
@@ -38,15 +38,6 @@ classdef BSpline < handle
             y = permute(y, [3 2 1]);                                        % convert back to matrix
         end
         
-        
-         function y = spline_ddiff(obj, x, beta)
-            J = size(beta, 1);                                              % extract the basis cardinality and reshape beta
-            beta_reshaped = reshape(beta, J, 1, []);
-
-                                                                            % compute the linear basis combination
-            y = sum(beta_reshaped .* obj.basis_ddiff(x, 1:J));
-            y = permute(y, [3 2 1]);                                        % convert back to matrix
-         end       
         
                                                                         % B-spline basis function as in Tan and Ghosal (2019)
         function y = basis(obj, x, s)                                   % and Appendix E.2 in Ghosal and van der Vaart (2017)

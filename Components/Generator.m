@@ -13,7 +13,7 @@ classdef Generator < handle
 %
 %   measurements = generator.generate(beta) uses the cell-specific 
 %   (P-dimensional) parameter vectors in beta (NxP-dimensional) instead of
-%   randomly drawn random effects (useful for boostrapping tests).
+%   randomly drawn random effects (useful for bootstrapping tests).
 %
 %   [measurements, ground_truth] = generator.generate(...) additionally
 %   returns the complete ground_truth struct, which also contains the 
@@ -31,10 +31,10 @@ classdef Generator < handle
 %       0:20:200 (default) | numeric vector
 %
 %     error_const - Additive noise standard deviation
-%       0 (default) | positive scalar
+%       0 (default) | nonnegative scalar
 %
 %     error_std - Multiplicative noise standard deviation
-%       .05 (default) | positive scalar
+%       .05 (default) | nonnegative scalar
 %
 %     init - Initial conditions
 %       numeric vector
@@ -70,6 +70,11 @@ classdef Generator < handle
     
     methods
         function obj = Generator(system, varargin)                      % Constructor
+            from_file = ~isa(system, 'System');
+            if from_file                                                    % process model file if provided
+                system = System(string(system), varargin{:});
+            end
+            
             default_N = 20;                                                 % number of cells
             default_t = 0:20:200;                                           % time grid
             default_error_const = 0;                                        % additive error standard deviation
@@ -79,13 +84,14 @@ classdef Generator < handle
             default_LogNormal = false;
 
             parser = inputParser();
+            parser.KeepUnmatched = from_file;                               % allow System arguments (e.g. FixedParameters)
             
             overlaps = @(x, S) ~isempty(intersect(x, S));
-            addRequired(parser, 'system', @(x) isa(x, 'System') || isstring(string(x)) && numel(string(x)) == 1);
+            addRequired(parser, 'system', @(x) isa(x, 'System'));
             addParameter(parser, 'N', default_N, @(x) isnumeric(x) && x >= 2);
             addParameter(parser, 't', default_t, @isnumeric);
-            addParameter(parser, 'error_const', default_error_const, @(x) x > 0);
-            addParameter(parser, 'error_std', default_error_std, @(x) x > 0);
+            addParameter(parser, 'error_const', default_error_const, @(x) isscalar(x) && x >= 0);
+            addParameter(parser, 'error_std', default_error_std, @(x) isscalar(x) && x >= 0);
             addParameter(parser, 'init', default_init, ...
                          @(x) isnumeric(x) && numel(x) == system.K);
             addParameter(parser, 'b', default_b, ...
@@ -103,6 +109,8 @@ classdef Generator < handle
             parse(parser, system, varargin{:});
             
             obj.settings = parser.Results;
+            obj.settings.b = reshape(obj.settings.b, 1, []);                % row vector conventions
+            obj.settings.init = reshape(obj.settings.init, 1, []);
             
             if isstring(obj.settings.observed)
                 observed = 1:system.K;
@@ -111,10 +119,6 @@ classdef Generator < handle
             end
             
             obj.system = system;                                            % ODE system handle
-            if ~isa(system, 'System')                                       % process model file if provided
-                system = ODEIQM(string(system), varargin{:});
-            end
-            obj.system = system;
             obj.add_system_defaults();                                      % complete with defaults
         end
         

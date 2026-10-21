@@ -11,10 +11,9 @@ classdef Optimization < handle
 
     methods (Static)
         function [opt, H] = QPGLS(design, response, covariance, lb, ub, prior)
-            if nargin < 7, prior = struct('mean', 0, 'prec', 0); end
-
             P = size(design, 2);                                            % number of parameters
-            if nargin <= 5, lb = zeros(1, P); ub = Inf(1, P); end
+            if nargin < 4, lb = zeros(1, P); ub = Inf(1, P); end            % default bounds and (flat) prior
+            if nargin < 6, prior = struct('mean', 0, 'prec', 0); end
             precision = tryinv(covariance);
             
             Y = flatten(response);
@@ -22,9 +21,6 @@ classdef Optimization < handle
             H = X' * precision * X + prior.prec;                            % quadratic programming problem
             H = (H+H')/2;                                                   % force symmetry
             f = -X' * precision * Y - prior.prec * prior.mean;
-            if any(f ~= real(f), 'all') || any(f ~= real(f))
-                disp(1)
-            end
             
             A = kron([-1; 1], eye(length(lb)));                             % bounds to inequality constraints
             b = [-lb ub]';
