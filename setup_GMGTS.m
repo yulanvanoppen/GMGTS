@@ -22,7 +22,8 @@ function setup_GMGTS(save_path)
     required = {'Symbolic Math Toolbox', 'Optimization Toolbox', ...        % used by System, Optimization, and
                 'Statistics and Machine Learning Toolbox', ...              % random effect sampling/plots
                 'Model Predictive Control Toolbox'};                        % (mpcActiveSetSolver)
-    installed = {ver().Name};
+    toolboxes = ver;
+    installed = {toolboxes.Name};
     missing = required(~ismember(required, installed));
     if ~isempty(missing)
         warning('GMGTS:missingToolbox', 'Missing MATLAB toolbox(es): %s.', strjoin(missing, ', '));

@@ -156,7 +156,7 @@ classdef Smoother < handle
         function fit(obj)                                               % Fitted splines from estimated coefficients
             obj.data.smoothed = zeros(obj.T_fs, obj.L, obj.N);              % smoothed measurements
             obj.data.dsmoothed = zeros(obj.T_fs, obj.L, obj.N);             % corresponding gradients
-            obj.data.smoothed_fine = zeros(obj.data.T_fine, obj.L, obj.N);               % equivalent on fine time grid for plotting
+            obj.data.smoothed_fine = zeros(obj.data.T_fine, obj.L, obj.N);  % equivalent on fine time grid for plotting
             obj.data.dsmoothed_fine = zeros(obj.data.T_fine, obj.L, obj.N);
             
             for i = 1:obj.N

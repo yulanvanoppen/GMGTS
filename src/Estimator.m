@@ -258,7 +258,7 @@ classdef Estimator < handle
                 if ~isfield(data, 'init'), data.init = system.x0' + 1e-4; end
             else                                                            % components provided separately
                 traces = data;                                              % array with measurements instead of struct
-                is_name = @(x) ischar(x) || isstring(x);                    % number of positional arguments preceding
+                is_name = @(x) ischar(x) || (isstring(x) && isscalar(x));   % number of positional arguments preceding
                 n_positional = find(cellfun(is_name, varargin), 1) - 1;     % the Name/Value pairs (at most t, observed, init)
                 if isempty(n_positional), n_positional = numel(varargin); end
 

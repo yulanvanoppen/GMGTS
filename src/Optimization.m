@@ -12,7 +12,8 @@ classdef Optimization < handle
     methods (Static)
         function [opt, H] = QPGLS(design, response, covariance, lb, ub, prior)
             P = size(design, 2);                                            % number of parameters
-            if nargin < 4, lb = zeros(1, P); ub = Inf(1, P); end            % default bounds and (flat) prior
+            if nargin < 4, lb = zeros(1, P); end                            % default bounds and (flat) prior
+            if nargin < 5, ub = Inf(1, P); end
             if nargin < 6, prior = struct('mean', 0, 'prec', 0); end
             precision = tryinv(covariance);
             

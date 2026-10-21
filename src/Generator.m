@@ -112,10 +112,11 @@ classdef Generator < handle
             obj.settings.b = reshape(obj.settings.b, 1, []);                % row vector conventions
             obj.settings.init = reshape(obj.settings.init, 1, []);
             
-            if isstring(obj.settings.observed)
-                observed = 1:system.K;
+            if isstring(obj.settings.observed) || ischar(obj.settings.observed) ...
+                                               || iscellstr(obj.settings.observed)
+                observed = 1:system.K;                                      % convert state names to indices
                 obj.settings.observed = observed(ismember(system.states, ...
-                                                          obj.settings.observed));
+                                                          string(obj.settings.observed)));
             end
             
             obj.system = system;                                            % ODE system handle

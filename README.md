@@ -116,7 +116,7 @@ Each script in `experiments/` is self-contained: run `setup_GMGTS` and then the 
 
 The simulation studies with many settings take hours to run on a desktop computer; the remaining scripts take minutes. Computation times depend on hardware, so absolute timings will differ from those reported in [1], while relative comparisons should be similar.
 
-> **Note on numerical differences.** Version 1.1 fixes several bugs (see [CHANGELOG.md](CHANGELOG.md)). Two of these can change numerical results compared with version 1.0, which was used for [1]: the first-stage uncertainty estimates of partially observed systems, and the experimental-data analysis, in which the FP-specific dilution rates previously entered only the ODE integration and not the gradient-matching step. The exact code used for [1] remains available as release [v1.0](https://github.com/yulanvanoppen/GMGTS/releases/tag/v1.0) (archived at [Zenodo](https://doi.org/10.5281/zenodo.14884458)).
+> **Note on numerical differences.** Version 1.1 fixes several bugs (see [CHANGELOG.md](CHANGELOG.md)). Some of these can change numerical results compared with version 1.0, which was used for [1]: the first-stage uncertainty estimates of partially observed systems; the experimental-data analysis, in which the FP-specific dilution rates previously entered only the ODE integration and not the gradient-matching step; and the reference distance `ws_truth` in the maturation accuracy study, which is now normalized like the other distances. The exact code used for [1] remains available as release [v1.0](https://github.com/yulanvanoppen/GMGTS/releases/tag/v1.0) (archived at [Zenodo](https://doi.org/10.5281/zenodo.14884458)).
 
 &nbsp;
 
