@@ -1,19 +1,26 @@
+%% GMGTS example: interactive B-spline smoothing only
+%
+% Loads a precomputed System object, measurements, and ground truth from
+% example_data.mat and opens the interactive smoothing app (Stages=0, so
+% only the smoothing step of GMGTS is carried out). IQM Tools is not
+% required for this example.
+%
+% Run setup_GMGTS once per MATLAB session before this script.
+
+
 %% Load example system and data
 
-load('example_data.mat')
+load(fullfile(gmgts_root, 'examples', 'example_data.mat'))                 % loads system, data, ground_truth
 
 
-%% Estimate using the Estimator class                                       % (avoid System construction using IQM Tools)
+%% Smooth using the Estimator class                                         % (avoids System construction using IQM Tools)
 
 methods = "GMGTS";
-% methods = [methods "GTS"];                                                % uncomment to add GTS inference
-
-                                                                            % setup Estimator for the chosen methods
-                                                                            % with smoothing using the interactive app
+                                                                            % setup Estimator for smoothing only (Stages=0)
+                                                                            % using the interactive app
 estimator = Estimator(system, data, Methods=methods, Stages=0, InteractiveSmoothing=true);
 
-                                                                            % in case GTS is also used, optionally replace with
-estimates = estimator.estimate()                                            % [GMGTSest, GTSest] = estimator.estimate()
+estimates = estimator.estimate()                                            % returns smoothed states and gradients
 
-                                                                            % plot estimates/predictions versus ground truth
-plot(estimator, True=ground_truth, States=1:system.K, MaxCells=7)           % for the last 8 states and the first 7 cells
+                                                                            % plot smoothed measurements versus ground truth
+plot(estimator, True=ground_truth, States=1:system.K, MaxCells=7)           % for all states and the first 7 cells

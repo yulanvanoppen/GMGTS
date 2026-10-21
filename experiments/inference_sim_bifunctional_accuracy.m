@@ -1,11 +1,30 @@
+%% Simulation study: accuracy and speed for the bifunctional TCS model
+%
+% Compares GMGTS and GTS on simulated data from the bifunctional
+% two-component system (models/model_bifunctional.txt) for varying
+% sampling intervals (dt), multiplicative noise levels, and observation
+% scenarios (all states observed vs. the first two states hidden), using 10
+% random seeds per setting. Accuracy is measured by the (normalized)
+% Wasserstein and Hellinger distances between the estimated and the
+% data-generating random effects distributions.
+%
+% Output: results/simulation/bifunctional_accuracy.mat (saved after every
+% completed dt value, so partial results are kept).
+% Runtime: long (4 x 6 x 10 x 2 = 480 estimations with N = 200 cells).
+%
+% Run setup_GMGTS once per MATLAB session before this script.
+
+
 %% Setup system ------------------------------------------------------------
 
 clearvars
 close all
 
+results_dir = fullfile(gmgts_root, 'results', 'simulation');
+if ~isfolder(results_dir), mkdir(results_dir); end
+wsfile = fullfile(results_dir, 'bifunctional_accuracy.mat');
+
 system = System('model_bifunctional.txt', FixedParameters=["k1" "k2" "k4" "k6"]);
-save('system_bifunctional_measurable.mat', 'system')
-load('system_bifunctional_measurable.mat')
 
 dt_values = [2.5 5 10 20];
 noise_levels = [.001 .005 .01 .02 .05 .1];
@@ -14,7 +33,7 @@ seeds = 1:10;
 [ws_GMGTS, ws_GTS, ws_truth, wsu_GMGTS, wsu_GTS, wsu_truth, ...
  he_GMGTS, he_GTS, he_truth, times_GMGTS, times_GTS] = deal(zeros(length(seeds), length(noise_levels), length(dt_values), 2));
  
-for first_obs = [1 3]
+for first_obs = [1 3]                                                       % 1: all states observed, 3: first two states hidden
     for dt_idx = 1:length(dt_values)
         for noise_idx = 1:length(noise_levels)
             for seed = seeds
@@ -31,14 +50,14 @@ for first_obs = [1 3]
                 
                 [data, ground_truth] = generator.generate();
 
-                %% Estimate ----------------------------------------------------------------
+                %% Estimate ------------------------------------------------
 
                 methods = [];
                 methods = [methods "GMGTS"];
                 methods = [methods "GTS"];
 
                 estimator = Estimator(system, data, Methods=methods, Knots=[0 2.5 40]);
-                [GMGTS, GTS] = estimator.estimate('silent');
+                [GMGTS, GTS] = estimator.estimate(true);
 
                 GMGTS_wasserstein = wsdist(GMGTS.b, GMGTS.D, ground_truth.b, ground_truth.D);
                 GMGTS_wasserstein_unscaled = wsdist(GMGTS.b, GMGTS.D, ground_truth.b, ground_truth.D, false);
@@ -68,14 +87,8 @@ for first_obs = [1 3]
                 times_GTS(max(1, seed), noise_idx, dt_idx, first_idx) = times_GMGTS_GTS(2);
             end
         end
-        wsfile = 'simulation/bifunctional_accuracy.mat';
-    save(wsfile);   
+        save(wsfile);                                                       % checkpoint
     end
 end
 
-
-mkdir('simulation')
-wsfile = 'simulation/bifunctional_accuracy.mat';
 save(wsfile);
-
-
