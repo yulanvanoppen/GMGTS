@@ -32,6 +32,16 @@ classdef System < handle
 %   values. The arguments names and values should have equal numbers of
 %   elements.
 %
+%   system.set_fixed_values(names, values) changes the values of
+%   (a subset of) the fixed parameters after construction, rebuilding all
+%   derived functions so that integration and gradient matching remain
+%   consistent. (The fixed property is read-only for this reason.)
+%
+%   The model_file may be given as a path, or as a file name on the MATLAB
+%   path (e.g. 'model_bifunctional.txt' after running setup_GMGTS). The
+%   model is compiled to a MEX file in the current folder (named after the
+%   model file, e.g. MEX_bifunctional for model_bifunctional.txt).
+%
 %   See also ESTIMATOR, GENERATOR.
 
 properties (Access = private)
@@ -46,6 +56,8 @@ properties (Access = private)
         MEXf                                                                % MEX function
         fixed_indices                                                       % fixed parameter indices
         variable_indices                                                    % variable parameter indices
+        f_string                                                            % RHS expressions as read from the model file
+        k0_all                                                              % nominal values of all parameters
     end
     
     properties (SetAccess = private)
@@ -56,11 +68,11 @@ properties (Access = private)
         parameters                                                          % parameters
         parameters_variable                                                 % parameters excluding fixed
         x0                                                                  % model initial conditions
+        fixed                                                               % fixed parameter names and values
     end
     
     properties (Access = public)
-        fixed                                                               % fixed parameter names and values
-        k0                                                                  % model initial parameters
+        k0                                                                  % model nominal (variable) parameters
     end
     
     
@@ -70,15 +82,19 @@ properties (Access = private)
             parser.KeepUnmatched = true;                                         
             addRequired(parser, 'model_file', @(x) (ischar(x) || isstring(x)) ...
                                                    && endsWith(x, '.txt') );
-            addParameter(parser, 'FixedParameters', string([]), @isstring); 
+            addParameter(parser, 'FixedParameters', string([]), ...
+                         @(x) isstring(x) || ischar(x) || iscellstr(x)); 
             addParameter(parser, 'FixedValues', [], @isnumeric);
             parse(parser, model_file, varargin{:});
             
-            assert(isempty(parser.Results.FixedValues) || ...               % equal number of labels and constraints
-                   numel(parser.Results.FixedParameters) == numel(parser.Results.FixedValues))
+            fixed_names = reshape(string(parser.Results.FixedParameters), 1, []);
+            fixed_values = reshape(parser.Results.FixedValues, 1, []);
+            assert(isempty(fixed_values) || ...                             % equal number of labels and constraints
+                   numel(fixed_names) == numel(fixed_values), ...
+                   'FixedParameters and FixedValues must have equal numbers of elements.')
             
-            obj.fixed = struct('names', parser.Results.FixedParameters, ... % store IDs and fixed values
-                               'values', parser.Results.FixedValues);
+            obj.fixed = struct('names', fixed_names, ...                    % store IDs and fixed values
+                               'values', fixed_values);
             obj.process(model_file);                                        % extract relevant functions using IQMmodel
         end
         
@@ -131,7 +147,7 @@ properties (Access = private)
             
             S = zeros(length(t), obj.K, obj.P, nseries);
             for cell = 1:nseries                                            % substitute cell-specific parameters
-                full_parameters(~ismember(1:length(obj.parameters), obj.fixed_indices)) = parameters(cell, :);
+                full_parameters(obj.variable_indices) = parameters(cell, :);
                 out = IQMsensitivity(obj.MEX, t, cellstr(obj.parameters_variable'), [], options, full_parameters, settings.init(cell, :));
                 S(:, :, :, cell) = reshape([out.paramtrajectories.states{:}], [], obj.K, obj.P);
             end
@@ -190,53 +206,83 @@ properties (Access = private)
         end
         
         
+        function set_fixed_values(obj, names, values)                   % Change values of fixed parameters
+            names = reshape(string(names), 1, []);
+            values = reshape(values, 1, []);
+            assert(numel(names) == numel(values), ...
+                   'Provide one value for each fixed parameter name.')
+            [is_fixed, ind] = ismember(names, obj.fixed.names);
+            assert(all(is_fixed), 'Parameter(s) %s are not fixed in this system.', ...
+                   strjoin(names(~is_fixed), ', '))
+            
+            obj.fixed.values(ind) = values;                                 % update values and rebuild the
+            obj.build_functions();                                          % symbolic RHS decomposition/Jacobians
+        end
+        
+        
         function process(obj, model_file)                               % Process model file
             model_file = char(model_file);
+            if ~isfile(model_file) && ~isempty(which(model_file))           % resolve file names on the MATLAB path
+                model_file = which(model_file);
+            end
+            assert(isfile(model_file), 'Model file ''%s'' not found.', model_file)
+            
             contents = fileread(model_file);                                % regex to extract system name
             token = regexp(contents, '\* MODEL NAME\s*([^\n]+)\s*\*', 'tokens');
             obj.name = strtrim(token{1}{1});
             
             installIQMtools;
             obj.model = IQMmodel(model_file);                               % read model file
-            obj.MEX = ['MEX' replace(model_file, {'model_', '.txt'}, {'_', ''})];
+            [~, base_name] = fileparts(model_file);                         % MEX function name from file name
+            obj.MEX = matlab.lang.makeValidName(['MEX' replace(base_name, 'model_', '_')]);
             IQMmakeMEXmodel(obj.model, obj.MEX);                            % convert to MEXmodel
             obj.MEXf = str2func(obj.MEX);
             
-            [obj.states, f, obj.x0] = IQMstates(obj.model);
-            [obj.parameters, obj.k0] = IQMparameters(obj.model);
+            [obj.states, obj.f_string, obj.x0] = IQMstates(obj.model);
+            [obj.parameters, obj.k0_all] = IQMparameters(obj.model);
             obj.states = string(obj.states);
             obj.parameters = string(obj.parameters);
-            [~, obj.fixed_indices] = ismember(obj.fixed.names, obj.parameters);
-            obj.fixed_indices = obj.fixed_indices(obj.fixed_indices ~= 0);
-            obj.variable_indices = ~ismember(1:length(obj.parameters), obj.fixed_indices);
+            obj.K = length(obj.states);
             
-            [f, t, x, beta] = obj.construct_symbolic(f);
+            obj.separate_fixed();
+            obj.build_functions();
+        end
+        
+        
+        function separate_fixed(obj)                                    % Separate fixed and variable parameters
+            intersection = ismember(obj.fixed.names, obj.parameters);       % ignore names not in the model
+            obj.fixed.names = obj.fixed.names(intersection);
+            [~, obj.fixed_indices] = ismember(obj.fixed.names, obj.parameters);
+            if ~isempty(obj.fixed.values)
+                obj.fixed.values = obj.fixed.values(intersection);
+            else                                                            % nominal values by default
+                obj.fixed.values = reshape(obj.k0_all(obj.fixed_indices), 1, []);
+            end
+            
+            obj.variable_indices = ~ismember(1:length(obj.parameters), obj.fixed_indices);
+            obj.parameters_variable = obj.parameters(obj.variable_indices);
+            obj.k0 = obj.k0_all(obj.variable_indices);
+            obj.P = sum(obj.variable_indices);
+        end
+        
+        
+        function build_functions(obj)                                   % (Re)construct all derived functions
+            [f, t, x, beta] = obj.construct_symbolic();
             obj.construct_linear_decomposition(f, t, x, beta);
             obj.construct_rhs_jacobian(f, t, x, beta);
         end
         
         
-        function [f, t, x, beta] = construct_symbolic(obj, f)           % Setup symbolic function
-            obj.K = length(obj.states);
+        function [f, t, x, beta] = construct_symbolic(obj)              % Setup symbolic function
             t = sym('t', 'real');
             x = sym('x', [obj.K, 1], 'real');
-            f = subs(str2sym(f), [cellstr(obj.states') {'time'}], [x' t]);
+            f = subs(str2sym(obj.f_string), [cellstr(obj.states') {'time'}], [x' t]);
             
-            intersection = ismember(obj.fixed.names, obj.parameters);       % substitute fixed parameters
-            obj.fixed.names = obj.fixed.names(intersection);
-            if ~isempty(obj.fixed.values)
-                obj.fixed.values = obj.fixed.values(intersection);
-            else
-                [~, ind] = ismember(obj.fixed.names, obj.parameters);
-                obj.fixed.values = obj.k0(ind)';
+            if ~isempty(obj.fixed.names)                                    % substitute fixed parameters
+                f = subs(f, cellstr(obj.fixed.names), obj.fixed.values);
             end
-            f = subs(f, cellstr(obj.fixed.names), obj.fixed.values);
             
-            variable_elements = ~ismember(obj.parameters, obj.fixed.names); % separate remaining parameters
-            obj.parameters_variable = obj.parameters(variable_elements);
-            obj.k0 = obj.k0(variable_elements);
-            obj.P = sum(variable_elements);
-            beta = sym('beta', [obj.P, 1], 'real');
+            beta = sym('beta', [obj.P, 1], 'real');                         % substitute variable parameters
             f = subs(f, cellstr(obj.parameters_variable'), beta');
         end
         

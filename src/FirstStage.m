@@ -101,7 +101,7 @@ classdef FirstStage < handle
         end
             
 
-        function ss = squares_sum(obj, beta)                            % Weighted um of squared differences
+        function ss = squares_sum(obj, beta)                            % Weighted sum of squared differences
             ss = Inf;
             try                                                             % compute fitted trajectories
                 solution = obj.system.integrate(beta, obj.data, obj.data.t_data);
@@ -236,7 +236,7 @@ classdef FirstStage < handle
         end
 
 
-        function uncertainties_beta(obj, rep)                           % Parameter uncertainties for full observation
+        function uncertainties_beta(obj, ~)                             % Parameter uncertainties for full observation
             indices_t = 2:obj.T-1;                                          % time indices without interval ends
             indices_tk = reshape(indices_t' + obj.T*(0:obj.system.K-1), 1, []); % across states
             indices_2tk = reshape(indices_tk' + [0 obj.system.K*obj.T], 1, []); % across state and gradient components
@@ -245,12 +245,10 @@ classdef FirstStage < handle
             Z_fs = blkdiag(obj.data.basis_fs{:})';                          % equivalent with first stage time point grid
             dZ_fs = blkdiag(obj.data.dbasis_fs{:})' / range(obj.data.t);    % corresponding differentiated basis
 
-            if rep > 1                                                      % compute g(.), h(.), and their Jacobians for each cell
-                g_all = obj.system.g(obj.data.smoothed, obj.data.t);
-                dg_all = obj.system.dg(obj.data.smoothed, obj.data.t);
-                h_all = obj.system.h(obj.data.smoothed, obj.data.t);
-                dh_all = obj.system.dh(obj.data.smoothed, obj.data.t);
-            end
+            g_all = obj.system.g(obj.data.smoothed, obj.data.t);            % compute g(.), h(.), and their Jacobians for each cell
+            dg_all = obj.system.dg(obj.data.smoothed, obj.data.t);
+            h_all = obj.system.h(obj.data.smoothed, obj.data.t);
+            dh_all = obj.system.dh(obj.data.smoothed, obj.data.t);
             
             for i = 1:obj.N                                                 % estimated measurement error variances
                 S = diag(max(reshape(obj.data.variances_sm(:, :, i), 1, []), 1e-10));
@@ -382,7 +380,7 @@ classdef FirstStage < handle
                     
                                                                             % delta method approximation
                     obj.varbeta(:, :, i) = [dbeta_dX dbeta_ddX] * obj.varXdX(indices_2tk, indices_2tk, i) * [dbeta_dX dbeta_ddX]';
-                    if converged, return, end
+                    if converged, continue, end                             % final call: only update uncertainties (all cells)
 
                                                                             % iterative update of state/gradient covariance
                     identity_O_indices = zeros(obj.L * obj.T, obj.system.K * obj.T);

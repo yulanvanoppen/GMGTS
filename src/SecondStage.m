@@ -70,7 +70,7 @@ classdef SecondStage < handle
 
         
         function M_step(obj, iter, Dinv_iter)                           % Maximization step of EM algorithm
-            warning('off','MATLAB:singularMatrix')
+            ws = warning('off', 'MATLAB:singularMatrix');
             
             obj.b(iter+1, :) = mean(obj.beta(obj.cells, :, iter+1));        % update parameter mean
             b_iter = obj.b(iter+1, :)';
@@ -88,12 +88,11 @@ classdef SecondStage < handle
             end
             
             obj.D(:, :, iter+1) = mean(summands(:, :, obj.cells), 3);        % update D
-            warning('on')
+            warning(ws)                                                     % restore previous warning state
         end
 
         
         function extract_estimates(obj)                                 % Collect final estimates and predictions
-            obj.data.t_fine = linspace(obj.data.t(1), obj.data.t(end), 81);
             obj.data.precision = obj.precision;
             obj.data.b_est = obj.b(end, :);                                 % population mean
             if obj.settings.lognormal
