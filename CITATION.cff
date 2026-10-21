@@ -1,11 +1,37 @@
-ukbhfcff-version: 1.2.0
-message: "If you use this software, please cite it as below."
-authors:
-- family-names: "van Oppen"
-  given-names: "Yulan"
-  orcid: "https://orcid.org/0000-0001-8214-2907"
+cff-version: 1.2.0
+message: "If you use this software, please cite both the article and the software archive."
 title: "GMGTS Matlab code package"
-version: 1.0
+abstract: >-
+  MATLAB code package for nonlinear mixed-effects inference of ODE-based
+  models using Gradient Matching Global Two-Stage (GMGTS), including a
+  Global Two-Stage (GTS) implementation, a data generator, an interactive
+  smoothing app, and scripts and data reproducing the accompanying article.
+authors:
+  - family-names: "van Oppen"
+    given-names: "Yulan B."
+    orcid: "https://orcid.org/0000-0001-8214-2907"
+    affiliation: "University of Groningen"
+version: "1.0"
 doi: 10.5281/zenodo.14884458
 date-released: 2025-02-17
 url: "https://github.com/yulanvanoppen/GMGTS"
+repository-code: "https://github.com/yulanvanoppen/GMGTS"
+license: MIT
+keywords:
+  - mixed-effects models
+  - gradient matching
+  - global two-stage
+  - ordinary differential equations
+  - single-cell data
+  - MATLAB
+preferred-citation:
+  type: article
+  title: "Gradient matching accelerates mixed-effects inference for biochemical networks"
+  authors:
+    - family-names: "van Oppen"
+      given-names: "Yulan B."
+      orcid: "https://orcid.org/0000-0001-8214-2907"
+    - family-names: "Milias-Argeitis"
+      given-names: "Andreas"
+  year: 2024
+  notes: "Manuscript submitted for publication"
