@@ -1,6 +1,20 @@
-*.mexw64
+# MATLAB
 *.asv
-*.mat
 *.fig
-PLOT_*.m
+*.mex*
+*.mexw64
+*.mexa64
+*.mexmaci64
+*.mexmaca64
+slprj/
+
+# Generated results and intermediate files
+*.mat
+!examples/example_data.mat
+results/
 figures/
+PLOT_*.m
+
+# OS
+.DS_Store
+Thumbs.db
